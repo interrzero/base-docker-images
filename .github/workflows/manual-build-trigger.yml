@@ -1,0 +1,213 @@
+# Manual Build Trigger Workflow
+# This workflow allows manual triggering of Docker image builds
+# either for all images or specific ones
+
+name: Manual Build Trigger
+
+on:
+  workflow_dispatch:
+    inputs:
+      images:
+        description: 'Comma-separated list of images to build (leave empty for all modified images)'
+        required: false
+        default: ''
+        type: string
+      force_all:
+        description: 'Force build all images regardless of changes'
+        required: false
+        default: false
+        type: boolean
+      reason:
+        description: 'Reason for manual build'
+        required: false
+        default: 'Manual trigger'
+        type: string
+
+env:
+  REGISTRY: ghcr.io
+
+jobs:
+  trigger_builds:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      packages: write
+      actions: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Configure Git
+        run: |
+          git config user.email "i0-baseimages-bot@users.noreply.github.com"
+          git config user.name "i0 Base Images Bot"
+
+      - name: Determine images to build
+        id: determine_images
+        run: |
+          # Function to increment patch version
+          increment_version() {
+            local version=$1
+            local ver_num=$(echo "$version" | sed 's/.*\/v//')
+            local major=$(echo "$ver_num" | cut -d. -f1)
+            local minor=$(echo "$ver_num" | cut -d. -f2)
+            local patch=$(echo "$ver_num" | cut -d. -f3)
+            local new_patch=$((patch + 1))
+            echo "$major.$minor.$new_patch"
+          }
+
+          # Function to get the latest tag for an image
+          get_latest_tag() {
+            local image=$1
+            git tag -l "release/$image/v*" | sort -V | tail -1
+          }
+
+          # Function to check if Dockerfile was modified since last tag
+          dockerfile_modified_since_tag() {
+            local image=$1
+            local dockerfile="Dockerfile.$image"
+            local latest_tag=$(get_latest_tag "$image")
+            
+            if [ -z "$latest_tag" ]; then
+              return 0  # No previous tag, assume modified
+            fi
+            
+            if git diff --name-only "$latest_tag" HEAD | grep -q "^$dockerfile$"; then
+              return 0  # Modified
+            else
+              return 1  # Not modified
+            fi
+          }
+
+          all_images=(fips-base go-base nginx-base nodejs-base python-base wolfi-base openjdk17-base)
+          images_to_build=()
+
+          echo "Input parameters:"
+          echo "  images: '${{ github.event.inputs.images }}'"
+          echo "  force_all: '${{ github.event.inputs.force_all }}'"
+          echo "  reason: '${{ github.event.inputs.reason }}'"
+          echo ""
+
+          if [ "${{ github.event.inputs.force_all }}" = "true" ]; then
+            echo "🔄 Force build mode enabled - building all images"
+            images_to_build=("${all_images[@]}")
+          elif [ -n "${{ github.event.inputs.images }}" ]; then
+            echo "🎯 Building specific images: ${{ github.event.inputs.images }}"
+            IFS=',' read -ra ADDR <<< "${{ github.event.inputs.images }}"
+            for i in "${ADDR[@]}"; do
+              image=$(echo "$i" | xargs)  # trim whitespace
+              if [[ " ${all_images[@]} " =~ " ${image} " ]]; then
+                images_to_build+=("$image")
+              else
+                echo "⚠️  Unknown image: $image (skipping)"
+              fi
+            done
+          else
+            echo "🔍 Checking for modified Dockerfiles..."
+            for image in "${all_images[@]}"; do
+              if dockerfile_modified_since_tag "$image"; then
+                images_to_build+=("$image")
+                echo "✅ $image: Modified since last tag"
+              else
+                echo "➡️  $image: No changes since last tag"
+              fi
+            done
+          fi
+
+          if [ ${#images_to_build[@]} -eq 0 ]; then
+            echo "ℹ️  No images to build"
+            echo "images_json=[]" >> $GITHUB_OUTPUT
+            echo "has_images=false" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+
+          echo ""
+          echo "🚀 Images to build: ${images_to_build[*]}"
+          
+          # Convert to JSON array for matrix strategy
+          images_json=$(printf '%s\n' "${images_to_build[@]}" | jq -R . | jq -s .)
+          echo "images_json=$images_json" >> $GITHUB_OUTPUT
+          echo "has_images=true" >> $GITHUB_OUTPUT
+          
+          echo "Generated JSON: $images_json"
+
+      - name: Create and push release tags
+        if: steps.determine_images.outputs.has_images == 'true'
+        run: |
+          # Function to increment patch version
+          increment_version() {
+            local version=$1
+            local ver_num=$(echo "$version" | sed 's/.*\/v//')
+            local major=$(echo "$ver_num" | cut -d. -f1)
+            local minor=$(echo "$ver_num" | cut -d. -f2)
+            local patch=$(echo "$ver_num" | cut -d. -f3)
+            local new_patch=$((patch + 1))
+            echo "$major.$minor.$new_patch"
+          }
+
+          # Function to get the latest tag for an image
+          get_latest_tag() {
+            local image=$1
+            git tag -l "release/$image/v*" | sort -V | tail -1
+          }
+
+          images_json='${{ steps.determine_images.outputs.images_json }}'
+          images=$(echo "$images_json" | jq -r '.[]')
+          
+          echo "🏷️  Creating release tags..."
+          
+          for image in $images; do
+            latest_tag=$(get_latest_tag "$image")
+            if [ -n "$latest_tag" ]; then
+              new_version=$(increment_version "$latest_tag")
+            else
+              new_version="1.0.0"
+            fi
+            
+            new_tag="release/$image/v$new_version"
+            commit_msg="Manual release $image v$new_version - ${{ github.event.inputs.reason }}"
+            
+            echo "Creating tag: $new_tag"
+            git tag -a "$new_tag" -m "$commit_msg"
+            
+            echo "Pushing tag: $new_tag"
+            git push origin "$new_tag"
+            
+            echo "✅ Created and pushed: $new_tag"
+          done
+
+      - name: Build summary
+        if: steps.determine_images.outputs.has_images == 'true'
+        run: |
+          images_json='${{ steps.determine_images.outputs.images_json }}'
+          image_count=$(echo "$images_json" | jq length)
+          
+          echo ""
+          echo "📊 Build Summary"
+          echo "================"
+          echo "Reason: ${{ github.event.inputs.reason }}"
+          echo "Images triggered: $image_count"
+          echo "Force all: ${{ github.event.inputs.force_all }}"
+          echo ""
+          echo "🌐 Monitor builds at:"
+          echo "https://github.com/${{ github.repository }}/actions"
+
+  wait_for_completion:
+    needs: trigger_builds
+    runs-on: ubuntu-latest
+    if: needs.trigger_builds.outputs.has_images == 'true'
+    steps:
+      - name: Wait for workflow completion
+        run: |
+          echo "⏱️  Triggered image builds will appear shortly in the Actions tab"
+          echo "🔗 https://github.com/${{ github.repository }}/actions"
+          echo ""
+          echo "💡 Each release tag triggers a separate workflow run that will:"
+          echo "   1. Build Docker images for both linux/amd64 and linux/arm64"
+          echo "   2. Run security scans and tests"
+          echo "   3. Create GitHub releases"
+          echo "   4. Create multi-architecture manifests"
+          echo "   5. Publish to GitHub Container Registry"
