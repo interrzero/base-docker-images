@@ -116,8 +116,8 @@ jobs:
         if: github.event.ref == 'refs/heads/main'
         run: |
           # Configure git for bot user
-          git config user.email "aquia-base-images-bot@users.noreply.github.com"
-          git config user.name "Aquia Base Images Bot"
+          git config user.email "i0-baseimages-bot@users.noreply.github.com"
+          git config user.name "i0 Base Images Bot"
 
           # Create new tag with next patch version
           new_tag="release/${{ matrix.image_name }}/v${{ steps.next_version.outputs.patch }}"

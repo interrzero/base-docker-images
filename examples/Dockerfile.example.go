@@ -1,16 +1,16 @@
-# Example: Using Aquia Go Base Image
+# Example: Using i0 Go Base Image
 # This demonstrates how to use our pre-built, hardened Go base image.
 # Our go-base image provides the Go toolchain for building your applications.
 
 # Build stage: Use our Go base image pinned to Go 1.25
-# NOTE: Replace :latest with current version tag from https://github.com/aquia-inc/base-docker-images/releases
-FROM ghcr.io/aquia-inc/base-docker-images/go-base-linux-amd64:latest AS builder
+# NOTE: Replace :latest with current version tag from https://github.com/interrzero/base-docker-images/releases
+FROM ghcr.io/interrzero/base-docker-images/go-base-linux-amd64:latest AS builder
 
 USER nonroot
 WORKDIR /workspace
 
 # Show Go version information from our base image
-RUN echo "=== Aquia Go Base Image ===" && \
+RUN echo "=== i0 Go Base Image ===" && \
     cat /tmp/versions.txt && \
     echo "=== Go Build Environment ===" && \
     go version

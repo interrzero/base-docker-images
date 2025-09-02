@@ -1,12 +1,12 @@
 # Examples Directory
 
-This directory contains simple example Dockerfiles and configurations that demonstrate how to use Aquia's hardened base Docker images in real-world applications.
+This directory contains simple example Dockerfiles and configurations that demonstrate how to use i0's hardened base Docker images in real-world applications.
 
 ## ⚠️ Important Notice
 
 **These examples are for demonstration purposes only.** The version tags in these Dockerfiles use `:latest` as placeholders and are NOT kept up-to-date. They may reference outdated images with security vulnerabilities.
 
-**For production use, always replace `:latest` with current version tags from the [officially published images](https://github.com/orgs/aquia-inc/packages?repo_name=base-docker-images).**
+**For production use, always replace `:latest` with current version tags from the [officially published images](https://github.com/orgs/interrzero/packages?repo_name=base-docker-images).**
 
 ## Available Examples
 
@@ -41,15 +41,15 @@ This directory contains simple example Dockerfiles and configurations that demon
 To use these examples as starting points:
 
 1. **Copy the relevant Dockerfile** to your project
-2. **Replace `:latest` tags** with current version tags from [GHCR packages](https://github.com/orgs/aquia-inc/packages?repo_name=base-docker-images)
+2. **Replace `:latest` tags** with current version tags from [GHCR packages](https://github.com/orgs/interrzero/packages?repo_name=base-docker-images)
 3. **Modify** the example to fit your application's specific needs
 4. **Test locally** before deploying to any higher enviuronments.  Be thorough in your testing/validation.
 
 ## Getting Current Image References
 
 For the most up-to-date image references, see:
-- [Latest Releases](https://github.com/aquia-inc/base-docker-images/releases)
-- [GHCR Package Registry](https://github.com/orgs/aquia-inc/packages?repo_name=base-docker-images)
+- [Latest Releases](https://github.com/interrzero/base-docker-images/releases)
+- [GHCR Package Registry](https://github.com/orgs/interrzero/packages?repo_name=base-docker-images)
 - Repository README for current version information
 
 ## Best Practices

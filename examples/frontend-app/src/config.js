@@ -2,7 +2,7 @@
 // This demonstrates the config.js location block in default.conf
 window.APP_CONFIG = {
     apiUrl: '/api',
-    appName: 'Aquia Frontend Example',
+    appName: 'i0 Frontend Example',
     version: '1.0.0',
     environment: 'production',
     features: {

@@ -372,7 +372,7 @@ jobs:
             org.opencontainers.image.version=${{ steps.context.outputs.version }}
             org.opencontainers.image.created=${{ steps.build_timestamp.outputs.created }}
             org.opencontainers.image.revision=${{ github.sha }}
-            org.opencontainers.image.vendor=Aquia Inc
+            org.opencontainers.image.vendor=InterruptZero.io Inc.
             org.opencontainers.image.platform=${{ matrix.platform }}
             # Custom annotations
             build-url=${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
