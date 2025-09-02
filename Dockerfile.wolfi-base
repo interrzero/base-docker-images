@@ -8,3 +8,4 @@ FROM cgr.dev/chainguard/wolfi-base:latest@sha256:c15643c480330cc703bc100378c97b5
 # apk add --upgrade --no-cache libssl3 libcrypto3
 
 USER nonroot
+
