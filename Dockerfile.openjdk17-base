@@ -131,3 +131,4 @@ RUN bash -c 'echo "Verifying Java and Maven installation as $(whoami)..." && \
 # # Define the command to run your application
 # # Replace 'your-app-name.jar' with the actual name of your JAR file.
 # CMD ["java", "-jar", "your-app-name.jar"]
+

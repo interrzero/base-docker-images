@@ -22,3 +22,4 @@ RUN NODE_VERSION=$(node --version | sed 's/v//') && \
 RUN cat /tmp/versions.txt
 
 USER nobody
+
