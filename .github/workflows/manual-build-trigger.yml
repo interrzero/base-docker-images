@@ -213,3 +213,4 @@ jobs:
           echo "   3. Create GitHub releases"
           echo "   4. Create multi-architecture manifests"
           echo "   5. Publish to GitHub Container Registry"
+
