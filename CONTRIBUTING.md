@@ -173,6 +173,6 @@ Remember that everyone in the community is expected to follow the [Code of Condu
 
 <!-- LINKS -->
 
-[code-of-conduct]: https://github.com/aquia-inc/public-templates/blob/main/CODE_OF_CONDUCT.md
+[code-of-conduct]: https://github.com/interrzero/public-templates/blob/main/CODE_OF_CONDUCT.md
 
 <!-- /LINKS -->
