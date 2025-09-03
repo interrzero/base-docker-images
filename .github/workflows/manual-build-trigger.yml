@@ -128,8 +128,10 @@ jobs:
           echo "🚀 Images to build: ${images_to_build[*]}"
           
           # Convert to JSON array for matrix strategy
-          images_json=$(printf '%s\n' "${images_to_build[@]}" | jq -R . | jq -s .)
-          echo "images_json=$images_json" >> $GITHUB_OUTPUT
+          images_json=$(printf '%s\n' "${images_to_build[@]}" | jq -R . | jq -s . | tr -d '\n')
+          echo "images_json<<EOF" >> $GITHUB_OUTPUT
+          echo "$images_json" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
           echo "has_images=true" >> $GITHUB_OUTPUT
           
           echo "Generated JSON: $images_json"
@@ -211,3 +213,4 @@ jobs:
           echo "   3. Create GitHub releases"
           echo "   4. Create multi-architecture manifests"
           echo "   5. Publish to GitHub Container Registry"
+
