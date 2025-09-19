@@ -17,7 +17,7 @@ env:
 
 jobs:
   publish_image:
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     env:  # Add GH_TOKEN at the job level
       GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
     strategy:
@@ -110,15 +110,13 @@ jobs:
 
       - name: Build Docker Image for ${{ matrix.platform }} (Test)
         id: build_test
-        uses: docker/build-push-action@v6
+        uses: useblacksmith/build-push-action@v2
         with:
           pull: true
           file: Dockerfile.${{ steps.context.outputs.image-base-name }}
           platforms: ${{ matrix.platform }}
           load: true
           tags: ${{ github.repository }}/${{ steps.context.outputs.image-name }}:test
-          cache-from: type=gha,scope=${{ github.repository }}-${{ steps.context.outputs.image-name }}
-          cache-to: type=gha,mode=max,scope=${{ github.repository }}-${{ steps.context.outputs.image-name }}
 
       - name: Output Docker Image Size for ${{ matrix.platform }}
         run: |
@@ -577,7 +575,7 @@ jobs:
 
       - name: Build and push Docker image for ${{ matrix.platform }}
         id: docker_build
-        uses: docker/build-push-action@v6
+        uses: useblacksmith/build-push-action@v2
         if: github.event_name == 'push' && github.ref_type == 'tag'
         with:
           pull: true
@@ -586,8 +584,6 @@ jobs:
           platforms: ${{ matrix.platform }}
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
-          cache-from: type=gha,scope=${{ github.repository }}-${{ steps.context.outputs.image-name }}
-          cache-to: type=gha,mode=max,scope=${{ github.repository }}-${{ steps.context.outputs.image-name }}
 
       - name: Install Cosign
         uses: sigstore/cosign-installer@v3
@@ -861,7 +857,7 @@ jobs:
           fi
 
   create_release:
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     needs: publish_image
     if: github.event_name == 'push' && github.ref_type == 'tag' && needs.publish_image.result == 'success'
     permissions:
@@ -1196,7 +1192,7 @@ jobs:
 
   create_multiarch_manifests:
     needs: [publish_image, create_release]
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     if: github.event_name == 'push' && github.ref_type == 'tag' && needs.publish_image.result == 'success' && needs.create_release.result == 'success'
     permissions:
       contents: read
