@@ -28,7 +28,7 @@ env:
 
 jobs:
   trigger_builds:
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     permissions:
       contents: write
       packages: write
@@ -199,7 +199,7 @@ jobs:
 
   wait_for_completion:
     needs: trigger_builds
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     if: needs.trigger_builds.outputs.has_images == 'true'
     steps:
       - name: Wait for workflow completion
