@@ -113,7 +113,7 @@ jobs:
           echo "Next major version: ${{ steps.next_version.outputs.major }}"
 
       - name: Create and push release tag
-        if: github.event.ref == 'refs/heads/main'
+        if: github.ref == 'refs/heads/main'
         run: |
           # Configure git for bot user
           git config user.email "i0-baseimages-bot@users.noreply.github.com"
