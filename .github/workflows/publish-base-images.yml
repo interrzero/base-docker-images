@@ -66,29 +66,6 @@ jobs:
           tag: ${{ env.TAG }}
           platform: ${{ matrix.platform }}
 
-      - name: Check if image already exists for this tag
-        id: image_exists
-        if: github.event_name == 'push' && github.ref_type == 'tag'
-        run: |
-          image_name="${{ env.REGISTRY }}/${{ github.repository }}/${{ steps.context.outputs.image-name }}"
-          tag="${{ steps.context.outputs.version }}"
-
-          echo "Checking if image already exists: $image_name:$tag"
-
-          if docker manifest inspect "$image_name:$tag" >/dev/null 2>&1; then
-            echo "image_exists=true" >> $GITHUB_OUTPUT
-            echo "Image already exists for tag $tag, will skip build"
-          else
-            echo "image_exists=false" >> $GITHUB_OUTPUT
-            echo "Image does not exist for tag $tag, will proceed with build"
-          fi
-
-      - name: Exit early if image already published
-        if: github.event_name == 'push' && github.ref_type == 'tag' && steps.image_exists.outputs.image_exists == 'true'
-        run: |
-          echo "Image already published for this tag, skipping build."
-          exit 0
-
       - name: Check if Dockerfile changed for this image
         id: dockerfile_check
         run: |
@@ -121,6 +98,29 @@ jobs:
         if: steps.dockerfile_check.outputs.dockerfile_changed != 'true'
         run: |
           echo "Did not detect any modified Dockerfiles in this commit, exiting."
+          exit 0
+
+      - name: Check if image already exists for this tag
+        id: image_exists
+        if: github.event_name == 'push' && github.ref_type == 'tag'
+        run: |
+          image_name="${{ env.REGISTRY }}/${{ github.repository }}/${{ steps.context.outputs.image-name }}"
+          tag="${{ steps.context.outputs.version }}"
+
+          echo "Checking if image already exists: $image_name:$tag"
+
+          if docker manifest inspect "$image_name:$tag" >/dev/null 2>&1; then
+            echo "image_exists=true" >> $GITHUB_OUTPUT
+            echo "Image already exists for tag $tag, will skip build"
+          else
+            echo "image_exists=false" >> $GITHUB_OUTPUT
+            echo "Image does not exist for tag $tag, will proceed with build"
+          fi
+
+      - name: Exit early if image already published
+        if: github.event_name == 'push' && github.ref_type == 'tag' && steps.image_exists.outputs.image_exists == 'true'
+        run: |
+          echo "Image already published for this tag, skipping build."
           exit 0
 
       - name: Setup Docker environment
