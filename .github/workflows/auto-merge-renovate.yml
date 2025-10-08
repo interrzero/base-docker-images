@@ -109,10 +109,10 @@ jobs:
             SHOULD_MERGE=true
             REASON="Digest-only update (low risk)"
 
-          # Patch/minor updates for GitHub Actions
-          elif echo "$PR_TITLE" | grep -qiE "update .*(action|workflow).*to v[0-9]+\.[0-9]+"; then
+          # All updates for GitHub Actions (major, minor, patch)
+          elif echo "$PR_TITLE" | grep -qiE "update .*(action|workflow)"; then
             SHOULD_MERGE=true
-            REASON="GitHub Actions patch/minor update"
+            REASON="GitHub Actions update"
 
           # Patch updates for Docker images
           elif echo "$PR_TITLE" | grep -qiE "update .*(docker|image)"; then
