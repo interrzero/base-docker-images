@@ -91,55 +91,45 @@ jobs:
           echo "reason=$REASON" >> $GITHUB_OUTPUT
           echo "Decision: $REASON"
 
-      - name: Wait for CI checks
+      - name: Enable GitHub auto-merge
         if: steps.should_merge.outputs.should_merge == 'true'
         uses: actions/github-script@v7
         with:
           script: |
-            const pr_number = ${{ steps.pr.outputs.number }};
-            const max_attempts = 60; // 10 minutes max wait
-            const delay_ms = 10000; // 10 seconds between checks
-
-            for (let i = 0; i < max_attempts; i++) {
-              const { data: pr } = await github.rest.pulls.get({
-                owner: context.repo.owner,
-                repo: context.repo.repo,
-                pull_number: pr_number
+            // Enable GitHub's native auto-merge feature
+            // This will automatically merge the PR when all checks pass
+            try {
+              await github.graphql(`
+                mutation($pullRequestId: ID!) {
+                  enablePullRequestAutoMerge(input: {
+                    pullRequestId: $pullRequestId,
+                    mergeMethod: SQUASH
+                  }) {
+                    pullRequest {
+                      id
+                      autoMergeRequest {
+                        enabledAt
+                      }
+                    }
+                  }
+                }
+              `, {
+                pullRequestId: context.payload.pull_request.node_id
               });
 
-              console.log(`Check ${i + 1}/${max_attempts}: mergeable_state = ${pr.mergeable_state}`);
+              console.log('✅ Auto-merge enabled - PR will merge when all checks pass');
 
-              if (pr.mergeable_state === 'clean' || pr.mergeable_state === 'unstable') {
-                console.log('PR is ready to merge!');
-                return;
-              }
-
-              if (pr.mergeable_state === 'dirty' || pr.mergeable_state === 'blocked') {
-                core.setFailed(`PR cannot be merged: ${pr.mergeable_state}`);
-                return;
-              }
-
-              // Wait before next check
-              await new Promise(resolve => setTimeout(resolve, delay_ms));
+              // Add a comment to explain what happened
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: ${{ steps.pr.outputs.number }},
+                body: '✅ **Auto-merge enabled**\n\nReason: ${{ steps.should_merge.outputs.reason }}\n\nThis PR will automatically merge when all required checks pass.'
+              });
+            } catch (error) {
+              console.error('Failed to enable auto-merge:', error);
+              core.setFailed(`Could not enable auto-merge: ${error.message}`);
             }
-
-            core.setFailed('Timeout waiting for CI checks to complete');
-
-      - name: Enable auto-merge
-        if: steps.should_merge.outputs.should_merge == 'true'
-        uses: actions/github-script@v7
-        with:
-          script: |
-            await github.rest.pulls.merge({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              pull_number: ${{ steps.pr.outputs.number }},
-              merge_method: 'squash',
-              commit_title: '${{ steps.pr.outputs.title }}',
-              commit_message: 'Auto-merged by renovate automation\n\nReason: ${{ steps.should_merge.outputs.reason }}'
-            });
-
-            console.log('PR auto-merged successfully');
 
       - name: Comment on PR (if not auto-merged)
         if: steps.should_merge.outputs.should_merge == 'false'
