@@ -1,7 +1,7 @@
 name: Auto-merge Renovate PRs
 
 on:
-  # Only trigger after other workflows complete
+  # Trigger after Docker/release workflows complete
   workflow_run:
     workflows:
       - "Publish Base Docker images"
@@ -10,6 +10,15 @@ on:
       - completed
     branches:
       - main
+  # Also trigger on PR events for GitHub Actions updates (which don't run Docker workflows)
+  pull_request_target:
+    types:
+      - opened
+      - synchronize
+      - reopened
+    paths:
+      - '.github/workflows/**'
+      - '.github/actions/**'
 
 permissions:
   contents: write
@@ -19,38 +28,48 @@ permissions:
 jobs:
   auto-merge:
     runs-on: ubuntu-latest
-    # Only run if the workflow that triggered us was successful
-    if: github.event.workflow_run.conclusion == 'success'
+    # Only run if workflow_run was successful, or if triggered by pull_request_target
+    if: |
+      github.event_name == 'pull_request_target' ||
+      (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success')
     steps:
-      - name: Get PR details from workflow run
+      - name: Get PR details
         id: pr
         uses: actions/github-script@v7
         with:
           script: |
-            // Get the PR associated with this workflow run
-            const workflow_run = context.payload.workflow_run;
+            let pr;
 
-            // Get PRs associated with the head commit
-            const pulls = await github.rest.repos.listPullRequestsAssociatedWithCommit({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              commit_sha: workflow_run.head_sha
-            });
-
-            if (pulls.data.length === 0) {
-              console.log('No PR found for this workflow run');
-              return null;
+            // Handle pull_request_target trigger
+            if (context.eventName === 'pull_request_target') {
+              pr = context.payload.pull_request;
+              console.log(`Direct PR trigger - PR #${pr.number}: ${pr.title}`);
             }
+            // Handle workflow_run trigger
+            else if (context.eventName === 'workflow_run') {
+              const workflow_run = context.payload.workflow_run;
 
-            const pr = pulls.data[0];
+              // Get PRs associated with the head commit
+              const pulls = await github.rest.repos.listPullRequestsAssociatedWithCommit({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                commit_sha: workflow_run.head_sha
+              });
+
+              if (pulls.data.length === 0) {
+                console.log('No PR found for this workflow run');
+                return null;
+              }
+
+              pr = pulls.data[0];
+              console.log(`Workflow run trigger - Found PR #${pr.number}: ${pr.title}`);
+            }
 
             // Only process Renovate PRs
             if (pr.user.login !== 'renovate[bot]' && pr.user.login !== 'renovate') {
               console.log(`Skipping non-Renovate PR from ${pr.user.login}`);
               return null;
             }
-
-            console.log(`Found Renovate PR #${pr.number}: ${pr.title}`);
 
             core.setOutput('number', pr.number);
             core.setOutput('title', pr.title);
