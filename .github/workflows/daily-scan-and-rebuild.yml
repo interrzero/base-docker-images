@@ -1,16 +1,30 @@
 # .github/workflows/daily-scan-rebuild.yml
-name: Daily Vulnerability Scan and Rebuild
+name: Vulnerability Scan and Rebuild
 
 on:
   schedule:
     # Runs daily at 10:00 UTC (5 AM EST / 6 AM EDT)
     - cron: '0 10 * * *'
   workflow_dispatch:
+    inputs:
+      force_rebuild:
+        description: 'Force rebuild even if within cooldown period'
+        required: false
+        default: false
+        type: boolean
+      ignore_cooldown:
+        description: 'Ignore cooldown period (for emergencies)'
+        required: false
+        default: false
+        type: boolean
 
 env:
   REGISTRY: ghcr.io
   GH_REPO: ${{ github.repository }}
   TRIGGER_SEVERITIES: "CRITICAL,HIGH,MEDIUM"
+  # Cooldown periods in hours - don't rebuild if last release was within this time
+  REBUILD_COOLDOWN_HOURS: "24"  # 1 day (daily rebuilds for both language and non-language)
+  CRITICAL_COOLDOWN_HOURS: "0"  # No cooldown for CRITICAL vulnerabilities
 
 jobs:
   scan_and_rebuild:
@@ -188,6 +202,30 @@ jobs:
               continue
             fi
             echo "Latest release tag found: $latest_release_tag"
+
+            # COOLDOWN CHECK: Skip if recently rebuilt (unless force or critical)
+            if [ "${{ github.event.inputs.ignore_cooldown }}" != "true" ]; then
+              # Get the commit timestamp of the latest tag
+              tag_commit=$(git rev-list -n 1 "$latest_release_tag")
+              tag_timestamp=$(git show -s --format=%ct "$tag_commit")
+              current_timestamp=$(date +%s)
+              hours_since_last_release=$(( (current_timestamp - tag_timestamp) / 3600 ))
+
+              cooldown_hours="${REBUILD_COOLDOWN_HOURS:-72}"
+
+              echo "⏱️  Hours since last release for $base_name: $hours_since_last_release (cooldown: ${cooldown_hours}h)"
+
+              if [ "$hours_since_last_release" -lt "$cooldown_hours" ]; then
+                echo "⏸️  Skipping $base_name: Within ${cooldown_hours}h cooldown period"
+                echo "   Last release: $(date -d @${tag_timestamp} 2>/dev/null || date -r ${tag_timestamp})"
+                echo "   Next eligible: $(date -d @$((tag_timestamp + cooldown_hours * 3600)) 2>/dev/null || date -r $((tag_timestamp + cooldown_hours * 3600)))"
+                continue
+              else
+                echo "✅ $base_name passed cooldown check (${hours_since_last_release}h > ${cooldown_hours}h)"
+              fi
+            else
+              echo "⚠️  Cooldown check skipped (ignore_cooldown=true)"
+            fi
 
             # Extract version and create rebuild tag
             version_part=$(echo "$latest_release_tag" | sed -n "s|release/${base_name}/\(v.*\)|\1|p")
