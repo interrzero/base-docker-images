@@ -3,7 +3,7 @@
 
 This repository contains Dockerfiles and releases of hardened i0 Base Docker Images.
 
-[![Latest Repository Release](https://img.shields.io/github/v/release/interrzero/base-docker-images?label=Latest%20Repository%20Release&style=for-the-badge&logo=github)](https://github.com/interrzero/base-docker-images/releases/latest) [![Repository Release Date](https://img.shields.io/github/release-date/interrzero/base-docker-images?label=Repository%20Release%20Date&style=for-the-badge&logo=calendar)](https://github.com/interrzero/base-docker-images/releases/latest)
+[![Publish Base Docker images](https://github.com/interrzero/base-docker-images/actions/workflows/publish-base-images.yml/badge.svg)](https://github.com/interrzero/base-docker-images/actions/workflows/publish-base-images.yml) [![Repository Release Date](https://img.shields.io/github/release-date/interrzero/base-docker-images?label=Repository%20Release%20Date&style=for-the-badge&logo=calendar)](https://github.com/interrzero/base-docker-images/releases/latest)
 
 ![Many Dockerfiles](dockerfiledotfinaldotv2dotfinallyfinal-v0-l7sfec8j2v5e1.png.webp)
 
