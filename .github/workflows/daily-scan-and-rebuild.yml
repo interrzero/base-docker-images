@@ -28,7 +28,7 @@ env:
 
 jobs:
   scan_and_rebuild:
-    runs-on: blacksmith-4vcpu-ubuntu-2404
+    runs-on: ubuntu-latest
     permissions:
       contents: write    # Needed to push new tags
       packages: read     # Needed to pull images and inspect manifests

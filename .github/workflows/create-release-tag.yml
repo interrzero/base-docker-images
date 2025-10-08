@@ -14,7 +14,7 @@ permissions:
 
 jobs:
   detect_changed_images:
-    runs-on: blacksmith-4vcpu-ubuntu-2404
+    runs-on: ubuntu-latest
     outputs:
       images_matrix: ${{ steps.build_matrix.outputs.images_to_build }}
       has_changes: ${{ steps.build_matrix.outputs.has_changes }}
@@ -28,8 +28,15 @@ jobs:
         id: build_matrix
         run: |
           # get changed Dockerfiles from git diff
-          changed_files=$(git diff --name-only ${{ github.event.before }} \
-            ${{ github.event.after }} | grep '^Dockerfile\.' | xargs)
+          # Use HEAD~1 and HEAD for push events to ensure we always have a valid range
+          if [ -z "${{ github.event.before }}" ] || [ "${{ github.event.before }}" = "0000000000000000000000000000000000000000" ]; then
+            echo "No before commit, comparing HEAD~1..HEAD"
+            changed_files=$(git diff --name-only HEAD~1 HEAD | grep '^Dockerfile\.' | xargs || true)
+          else
+            echo "Comparing ${{ github.event.before }}..${{ github.event.after }}"
+            changed_files=$(git diff --name-only ${{ github.event.before }} ${{ github.event.after }} | grep '^Dockerfile\.' | xargs || true)
+          fi
+          echo "Changed files: $changed_files"
           echo "changed_dockerfiles=$changed_files" >> $GITHUB_OUTPUT
 
           # get image names from Dockerfile extensions
@@ -64,7 +71,7 @@ jobs:
   create_release_tags:
     needs: detect_changed_images
     if: needs.detect_changed_images.outputs.has_changes == 'true'
-    runs-on: blacksmith-4vcpu-ubuntu-2404
+    runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
@@ -113,7 +120,7 @@ jobs:
           echo "Next major version: ${{ steps.next_version.outputs.major }}"
 
       - name: Create and push release tag
-        if: github.ref == 'refs/heads/main'
+        if: github.event.ref == 'refs/heads/main'
         run: |
           # Configure git for bot user
           git config user.email "i0-baseimages-bot@users.noreply.github.com"
