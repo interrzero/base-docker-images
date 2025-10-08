@@ -35,7 +35,7 @@ jobs:
     steps:
       - name: Get PR details
         id: pr
-        uses: actions/github-script@v7
+        uses: actions/github-script@v8
         with:
           script: |
             let pr;
@@ -137,7 +137,7 @@ jobs:
 
       - name: Enable GitHub auto-merge
         if: steps.pr.outputs.found == 'true' && steps.should_merge.outputs.should_merge == 'true'
-        uses: actions/github-script@v7
+        uses: actions/github-script@v8
         with:
           script: |
             // Enable GitHub's native auto-merge feature
@@ -177,7 +177,7 @@ jobs:
 
       - name: Comment on PR (if not auto-merged)
         if: steps.pr.outputs.found == 'true' && steps.should_merge.outputs.should_merge == 'false'
-        uses: actions/github-script@v7
+        uses: actions/github-script@v8
         with:
           script: |
             await github.rest.issues.createComment({
