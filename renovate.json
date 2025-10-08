@@ -11,6 +11,7 @@
   "assigneesFromCodeOwners": true,
   "automergeType": "pr",
   "automergeStrategy": "squash",
+  "platformAutomerge": true,
   "dependencyDashboard": true,
   "dependencyDashboardAutoclose": true,
   "schedule": [
@@ -26,13 +27,13 @@
     "automerge": true,
     "groupName": "minor dependencies",
     "groupSlug": "all-minor",
-    "minimumReleaseAge": "2 days"
+    "minimumReleaseAge": "0 days"
   },
   "patch": {
     "automerge": true,
     "groupName": "patch dependencies",
     "groupSlug": "all-patch",
-    "minimumReleaseAge": "1 day"
+    "minimumReleaseAge": "0 days"
   },
   "terraform": {
     "enabled": false
@@ -42,10 +43,64 @@
   ],
   "packageRules": [
     {
-      "matchCategories": [
-        "docker"
-      ],
+      "description": "Docker digest updates - automerge immediately (low risk, just SHA updates)",
+      "matchCategories": ["docker"],
+      "matchUpdateTypes": ["digest"],
+      "automerge": true,
+      "minimumReleaseAge": "0 days",
       "pinDigests": true
+    },
+    {
+      "description": "Language base images - daily updates for minor",
+      "matchPackageNames": [
+        "cgr.dev/chainguard/wolfi-base",
+        "cgr.dev/chainguard/go"
+      ],
+      "matchUpdateTypes": ["minor"],
+      "automerge": true,
+      "minimumReleaseAge": "1 day"
+    },
+    {
+      "description": "Language base images - immediate updates for patch",
+      "matchPackageNames": [
+        "cgr.dev/chainguard/wolfi-base",
+        "cgr.dev/chainguard/go"
+      ],
+      "matchUpdateTypes": ["patch"],
+      "automerge": true,
+      "minimumReleaseAge": "0 days"
+    },
+    {
+      "description": "Non-language base images - daily updates for minor",
+      "matchPackageNames": [
+        "cgr.dev/chainguard/nginx",
+        "ghcr.io/wolfi-dev/alpine-base"
+      ],
+      "matchUpdateTypes": ["minor"],
+      "automerge": true,
+      "minimumReleaseAge": "1 day"
+    },
+    {
+      "description": "Non-language base images - immediate updates for patch",
+      "matchPackageNames": [
+        "cgr.dev/chainguard/nginx",
+        "ghcr.io/wolfi-dev/alpine-base"
+      ],
+      "matchUpdateTypes": ["patch"],
+      "automerge": true,
+      "minimumReleaseAge": "0 days"
+    },
+    {
+      "description": "GitHub Actions - automerge patch and minor",
+      "matchManagers": ["github-actions"],
+      "matchUpdateTypes": ["minor", "patch"],
+      "automerge": true,
+      "minimumReleaseAge": "1 day"
+    },
+    {
+      "description": "All major updates require manual review",
+      "matchUpdateTypes": ["major"],
+      "automerge": false
     }
   ]
 }
