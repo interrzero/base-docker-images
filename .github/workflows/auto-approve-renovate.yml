@@ -16,6 +16,21 @@ jobs:
     if: github.actor == 'renovate[bot]' || github.actor == 'renovate'
     steps:
       - name: Auto-approve Renovate PR
-        uses: hmarr/auto-approve-action@v4
+        uses: actions/github-script@v8
         with:
           github-token: ${{ secrets.PAT_TOKEN }}
+          script: |
+            const { owner, repo } = context.repo;
+            const pull_number = context.payload.pull_request.number;
+
+            console.log(`Approving PR #${pull_number} from ${context.actor}`);
+
+            await github.rest.pulls.createReview({
+              owner,
+              repo,
+              pull_number,
+              event: 'APPROVE',
+              body: 'Auto-approved by workflow'
+            });
+
+            console.log(`✅ Successfully approved PR #${pull_number}`);
