@@ -3,7 +3,7 @@
 FROM cgr.dev/chainguard/wolfi-base:latest@sha256:815b27b8a70713c70404e44a718eddd52ea6f4a2bfad5f56455b52cd2789a9b2
 
 # Define versions as arguments for easier updates and clarity
-ARG MAVEN_VERSION=3.9.8-r0
+ARG MAVEN_VERSION=3.9
 ARG OPENJDK_PACKAGE=openjdk-17
 
 # Install necessary packages, common build tools, create non-root user, and perform cleanup
@@ -12,7 +12,7 @@ RUN apk update && \
     apk add --no-cache --upgrade \
         # Core Java/Maven stack
         ${OPENJDK_PACKAGE} \
-        maven=${MAVEN_VERSION} \
+        'maven=~${MAVEN_VERSION}' \
         # Essential runtime dependencies (kept up-to-date by --upgrade)
         libcrypto3 \
         libssl3 \
