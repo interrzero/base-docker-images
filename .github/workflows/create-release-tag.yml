@@ -22,6 +22,7 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v5
         with:
+          token: "${{ secrets.GHCR_PAT_I0 }}"
           fetch-depth: 0
 
       - name: Detect changed Dockerfiles and build matrix
@@ -80,7 +81,7 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v5
         with:
-          token: "${{ secrets.PAT_TOKEN }}"
+          token: "${{ secrets.GHCR_PAT_I0 }}"
           fetch-depth: 0
 
       - name: Display processing image
