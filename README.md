@@ -55,7 +55,8 @@ Images are considered hardened when they do not contain fixed CVE vulnerabilitie
 
 * **Go**: 1.25.x (from chainguard/go:latest)
 * **Node.js**: 24.6.x with npm 11.5.x (from wolfi-base with nodejs/npm packages)
-* **Python**: 3.13.x (from wolfi-base with python3.13 package)
+* **Python**: 3.13.x (from wolfi-base with python-3.13 package, pinned to avoid auto-upgrade to 3.14)
+  * **Note**: Python 3.14 support will be added once `py3.14-pip` becomes available in the Wolfi package repository
 * **OpenJDK**: 17.x with Maven 3.9.8 (from wolfi-base with openjdk-17 package)
 * **Wolfi Base**: Latest minimal Linux distribution
 * **FIPS Base**: Custom OpenSSL 3.0.9 with FIPS validation ([beta](#beta-images))
