@@ -1,0 +1,25 @@
+FROM cgr.dev/chainguard/wolfi-base:latest@sha256:815b27b8a70713c70404e44a718eddd52ea6f4a2bfad5f56455b52cd2789a9b2 AS builder
+
+# Install Node.js, npm and Yarn
+RUN apk update && apk add --no-cache 'nodejs=~24' yarn npm
+
+# Extract Node.js version and save to file
+SHELL ["/bin/ash", "-o", "pipefail", "-c"]
+RUN node --version | awk -F'v' '{print $2}' | tr -d '\n' > /tmp/temp_node_version.txt
+
+# Create symbolic link to match the installed Node.js version
+RUN NODE_VERSION=$(cat /tmp/temp_node_version.txt) && \
+    mkdir -p /usr/local/nvm/versions/node && \
+    ln -s "/usr/local/nvm/versions/node/v${NODE_VERSION}/" /usr/local/nvm/versions/node/current
+
+# Save Node.js version
+SHELL ["/bin/ash", "-o", "pipefail", "-c"]
+RUN NODE_VERSION=$(node --version | sed 's/v//') && \
+    echo "nodejs_major_tag=$(echo $NODE_VERSION | cut -d'.' -f1)" > /tmp/versions.txt && \
+    echo "nodejs_minor_tag=$(echo $NODE_VERSION | cut -d'.' -f1-2)" >> /tmp/versions.txt && \
+    echo "nodejs=$NODE_VERSION" >> /tmp/versions.txt
+
+RUN cat /tmp/versions.txt
+
+USER nobody
+
