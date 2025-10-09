@@ -80,7 +80,7 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v5
         with:
-          ssh-key: "${{ secrets.DEPLOY_KEY }}"
+          token: "${{ secrets.PAT_TOKEN }}"
           fetch-depth: 0
 
       - name: Display processing image
