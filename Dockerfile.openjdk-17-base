@@ -12,7 +12,7 @@ RUN apk update && \
     apk add --no-cache --upgrade \
         # Core Java/Maven stack
         ${OPENJDK_PACKAGE} \
-        'maven=~${MAVEN_VERSION}' \
+        "maven=~${MAVEN_VERSION}" \
         # Essential runtime dependencies (kept up-to-date by --upgrade)
         libcrypto3 \
         libssl3 \
