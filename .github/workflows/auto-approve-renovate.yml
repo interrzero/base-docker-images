@@ -18,7 +18,7 @@ jobs:
       - name: Auto-approve Renovate PR
         uses: actions/github-script@v8
         with:
-          github-token: ${{ secrets.GHCR_PAT_I0 }}
+          github-token: ${{ secrets.PAT_TOKEN }}
           script: |
             const { owner, repo } = context.repo;
             const pull_number = context.payload.pull_request.number;
