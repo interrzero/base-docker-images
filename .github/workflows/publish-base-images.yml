@@ -227,7 +227,7 @@ jobs:
           platform-suffix: ${{ steps.context.outputs.platform-suffix }}
 
       - name: Upload versions artifact for ${{ matrix.platform }}
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         if: steps.extract_versions.outputs.extraction-success == 'true' && github.event_name == 'push' && github.ref_type == 'tag'
         with:
           name: versions-file-${{ steps.context.outputs.platform-suffix }}
@@ -360,7 +360,7 @@ jobs:
           echo "has_version_tags=${{ steps.version_tags.outputs.has_version_tags }}" >> version_artifacts/version_tags.env
 
       - name: Upload version tags as artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         if: github.event_name == 'push' && github.ref_type == 'tag' && steps.version_tags.outputs.has_version_tags == 'true'
         with:
           name: version-tags-${{ steps.context.outputs.image-base-name }}-${{ steps.context.outputs.platform-suffix }}
@@ -780,7 +780,7 @@ jobs:
           echo "provenance_file_path=$output_file" >> $GITHUB_OUTPUT
 
       - name: Upload provenance artifact for ${{ matrix.platform }}
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         if: github.event_name == 'push' && github.ref_type == 'tag' && steps.extract_logindex.outputs.provenance_file_path != ''
         with:
           name: provenance-${{ steps.context.outputs.image-base-name }}-${{ steps.context.outputs.platform-suffix }}
@@ -909,7 +909,7 @@ jobs:
           steps.parse_tag_release.outputs.image-base-name == 'openjdk17-base' ||
           steps.parse_tag_release.outputs.image-base-name == 'go-base'
         continue-on-error: true
-        uses: actions/download-artifact@v5
+        uses: actions/download-artifact@v6
         with:
           name: versions-file-linux-amd64
           path: .
@@ -922,7 +922,7 @@ jobs:
           steps.parse_tag_release.outputs.image-base-name == 'openjdk17-base' ||
           steps.parse_tag_release.outputs.image-base-name == 'go-base'
         continue-on-error: true
-        uses: actions/download-artifact@v5
+        uses: actions/download-artifact@v6
         with:
           name: versions-file-linux-arm64
           path: .
@@ -930,7 +930,7 @@ jobs:
       - name: Download AMD64 provenance artifact
         id: download_provenance_amd64
         continue-on-error: true
-        uses: actions/download-artifact@v5
+        uses: actions/download-artifact@v6
         with:
           name: provenance-${{ steps.parse_tag_release.outputs.image-base-name }}-linux-amd64
           path: .
@@ -938,7 +938,7 @@ jobs:
       - name: Download ARM64 provenance artifact
         id: download_provenance_arm64
         continue-on-error: true
-        uses: actions/download-artifact@v5
+        uses: actions/download-artifact@v6
         with:
           name: provenance-${{ steps.parse_tag_release.outputs.image-base-name }}-linux-arm64
           path: .
