@@ -992,53 +992,6 @@ jobs:
             fi
           }
 
-          # Initialize version variables
-          py_major_amd64="" py_minor_amd64="" py_full_amd64=""
-          py_major_arm64="" py_minor_arm64="" py_full_arm64=""
-          node_major_amd64="" node_minor_amd64="" node_full_amd64=""
-          node_major_arm64="" node_minor_arm64="" node_full_arm64=""
-          jdk_major_amd64="" jdk_minor_amd64="" jdk_full_amd64=""
-          jdk_major_arm64="" jdk_minor_arm64="" jdk_full_arm64=""
-          go_major_amd64="" go_minor_amd64="" go_full_amd64=""
-          go_major_arm64="" go_minor_arm64="" go_full_arm64=""
-
-          # Read versions if files exist
-          if [[ "${{ steps.download_artifact_amd64.outcome }}" == "success" ]]; then
-              echo "Reading AMD64 versions file..."
-              py_major_amd64=$(get_version_value "env.versions.linux-amd64" "python_major_tag")
-              py_minor_amd64=$(get_version_value "env.versions.linux-amd64" "python_minor_tag")
-              py_full_amd64=$(get_version_value "env.versions.linux-amd64" "python")
-              node_major_amd64=$(get_version_value "env.versions.linux-amd64" "nodejs_major_tag")
-              node_minor_amd64=$(get_version_value "env.versions.linux-amd64" "nodejs_minor_tag")
-              node_full_amd64=$(get_version_value "env.versions.linux-amd64" "nodejs")
-              jdk_major_amd64=$(get_version_value "env.versions.linux-amd64" "java_major_tag")
-              jdk_minor_amd64=$(get_version_value "env.versions.linux-amd64" "java_minor_tag")
-              jdk_full_amd64=$(get_version_value "env.versions.linux-amd64" "java")
-              go_major_amd64=$(get_version_value "env.versions.linux-amd64" "go_major_tag")
-              go_minor_amd64=$(get_version_value "env.versions.linux-amd64" "go_minor_tag")
-              go_full_amd64=$(get_version_value "env.versions.linux-amd64" "go")
-          else
-              echo "AMD64 versions artifact not downloaded or download failed."
-          fi
-
-          if [[ "${{ steps.download_artifact_arm64.outcome }}" == "success" ]]; then
-              echo "Reading ARM64 versions file..."
-              py_major_arm64=$(get_version_value "env.versions.linux-arm64" "python_major_tag")
-              py_minor_arm64=$(get_version_value "env.versions.linux-arm64" "python_minor_tag")
-              py_full_arm64=$(get_version_value "env.versions.linux-arm64" "python")
-              node_major_arm64=$(get_version_value "env.versions.linux-arm64" "nodejs_major_tag")
-              node_minor_arm64=$(get_version_value "env.versions.linux-arm64" "nodejs_minor_tag")
-              node_full_arm64=$(get_version_value "env.versions.linux-arm64" "nodejs")
-              jdk_major_arm64=$(get_version_value "env.versions.linux-arm64" "java_major_tag")
-              jdk_minor_arm64=$(get_version_value "env.versions.linux-arm64" "java_minor_tag")
-              jdk_full_arm64=$(get_version_value "env.versions.linux-arm64" "java")
-              go_major_arm64=$(get_version_value "env.versions.linux-arm64" "go_major_tag")
-              go_minor_arm64=$(get_version_value "env.versions.linux-arm64" "go_minor_tag")
-              go_full_arm64=$(get_version_value "env.versions.linux-arm64" "go")
-          else
-              echo "ARM64 versions artifact not downloaded or download failed."
-          fi
-
           # Read provenance information if files exist
           sigstore_amd64="" github_attestation_amd64=""
           sigstore_arm64="" github_attestation_arm64=""
@@ -1059,46 +1012,11 @@ jobs:
               echo "ARM64 provenance artifact not downloaded or download failed."
           fi
 
-          # Consolidate version info using generic variables
-          LANGUAGE_NAME=""
-          MAJOR_AMD64="" MINOR_AMD64="" FULL_AMD64=""
-          MAJOR_ARM64="" MINOR_ARM64="" FULL_ARM64=""
-
-          case "$image_base_name" in
-            "python-base")
-              LANGUAGE_NAME="Python"
-              MAJOR_AMD64=$py_major_amd64; MINOR_AMD64=$py_minor_amd64; FULL_AMD64=$py_full_amd64
-              MAJOR_ARM64=$py_major_arm64; MINOR_ARM64=$py_minor_arm64; FULL_ARM64=$py_full_arm64
-              ;;
-            "nodejs-base")
-              LANGUAGE_NAME="Node.js"
-              MAJOR_AMD64=$node_major_amd64; MINOR_AMD64=$node_minor_amd64; FULL_AMD64=$node_full_amd64
-              MAJOR_ARM64=$node_major_arm64; MINOR_ARM64=$node_minor_arm64; FULL_ARM64=$node_full_arm64
-              ;;
-            "openjdk17-base")
-              LANGUAGE_NAME="OpenJDK"
-              MAJOR_AMD64=$jdk_major_amd64; MINOR_AMD64=$jdk_minor_amd64; FULL_AMD64=$jdk_full_amd64
-              MAJOR_ARM64=$jdk_major_arm64; MINOR_ARM64=$jdk_minor_arm64; FULL_ARM64=$jdk_full_arm64
-              ;;
-            "go-base")
-              LANGUAGE_NAME="Go"
-              MAJOR_AMD64=$go_major_amd64; MINOR_AMD64=$go_minor_amd64; FULL_AMD64=$go_full_amd64
-              MAJOR_ARM64=$go_major_arm64; MINOR_ARM64=$go_minor_arm64; FULL_ARM64=$go_full_arm64
-              ;;
-          esac
-
           # Build Release Body
-          if [ -n "$LANGUAGE_NAME" ]; then
-            # Language-specific images
-            intro_text="Platform-specific Docker images for \`$image_base_name\` version \`$version_tag\` pushed.
+          intro_text="Platform-specific Docker images for \`$image_base_name\` version \`$version_tag\` pushed.
 
-          **For CI/CD stability, we strongly recommend pinning to major.minor versions (e.g., \`${MINOR_AMD64:-X.Y}\`) rather than \`latest\` or specific semver tags.** This provides the best balance of security updates while avoiding breaking changes."
-          else
-            # Non-language base images  
-            intro_text="Platform-specific Docker images for \`$image_base_name\` version \`$version_tag\` pushed.
-
-          **For non-language base images, pin to \`:latest\` tag with \`docker pull\` in your CI** to ensure you get the latest security updates and base image improvements."
-          fi
+          **We strongly recommend using the \`:latest\` tag for all images.** This ensures you always have the most recent security patches and updates.
+          To ensure your CI/CD pipeline always uses the latest version of the image, you should use the \`--pull\` flag in your \`docker build\` command."
 
           body=$(cat <<EOF
           $intro_text
@@ -1109,129 +1027,55 @@ jobs:
               *   Image: \`$registry/$repo_name/$image_base_name-linux-amd64\`
               *   Tag: \`$version_tag\`
               *   Tag: \`latest\`
-              $( [ -n "$MAJOR_AMD64" ] && printf "*   Tag: \`%s\`\n" "$MAJOR_AMD64" || true ) \
-              $( [ -n "$MINOR_AMD64" ] && printf "*   Tag: \`%s\`\n" "$MINOR_AMD64" || true )
           *   **linux/arm64:**
               *   Image: \`$registry/$repo_name/$image_base_name-linux-arm64\`
               *   Tag: \`$version_tag\`
               *   Tag: \`latest\`
-              $( [ -n "$MAJOR_ARM64" ] && printf "*   Tag: \`%s\`\n" "$MAJOR_ARM64" || true ) \
-              $( [ -n "$MINOR_ARM64" ] && printf "*   Tag: \`%s\`\n" "$MINOR_ARM64" || true )
+
+          **Dockerfile Example:**
+          \`\`\`dockerfile
+          FROM $registry/$repo_name/${image_base_name}:latest
+          \`\`\`
+
+          **Pull Example:**
+          \`\`\`bash
+          docker pull $registry/$repo_name/${image_base_name}:latest
+          \`\`\`
+
+          **Build command:**
+          \`\`\`bash
+          docker build --pull -t your-app .
+          \`\`\`
+
+          **🔐 Build Provenance & Supply Chain Security:**
           EOF
           )
 
-          # Add content specific to image type
-          if [ -n "$LANGUAGE_NAME" ]; then
-            # Language-specific images: version details + best practices + examples
-            version_details="
-
-          **$LANGUAGE_NAME Version Details:**
-          *   AMD64: Major=\`${MAJOR_AMD64:-N/A}\`, Minor=\`${MINOR_AMD64:-N/A}\`, Full=\`${FULL_AMD64:-N/A}\`
-          *   ARM64: Major=\`${MAJOR_ARM64:-N/A}\`, Minor=\`${MINOR_ARM64:-N/A}\`, Full=\`${FULL_ARM64:-N/A}\`
-
-          **🎯 $LANGUAGE_NAME Runtime Pinning Best Practices:**
-          * **✅ Recommended for CI/CD**: Pin to major.minor (e.g., \`${MINOR_AMD64:-X.Y}\`) - Gets security patches, avoids breaking changes
-          * **⚠️ Use with caution**: \`:latest\` tag - May introduce breaking changes unexpectedly  
-          * **⚠️ Avoid in CI**: Specific semver tags (e.g., \`$version_tag\`) - Misses important security updates
-          * **⚠️ High risk**: Major-only tags (e.g., \`${MAJOR_AMD64:-X}\`) - May include breaking changes within major versions
-
-          **Dockerfile Examples:**
-
-          **For Production/CI (Recommended):**
-          * **AMD64**: \`FROM $registry/$repo_name/${image_base_name}-linux-amd64:${MINOR_AMD64:-latest}\`
-          * **ARM64**: \`FROM $registry/$repo_name/${image_base_name}-linux-arm64:${MINOR_ARM64:-latest}\`
-          * **Build command**: \`docker build --pull ...\`
-
-          **Pull Examples:**
-
-          **For Production/CI (Recommended):**"
-            body+="$version_details"
-
-            # Add recommended major.minor examples
-            if [ -n "$MINOR_AMD64" ]; then
-              body+=$(printf '\n* **AMD64 (Recommended)**: \`docker pull %s/%s/%s-linux-amd64:%s\`' "$registry" "$repo_name" "$image_base_name" "$MINOR_AMD64")
-            fi
-            if [ -n "$MINOR_ARM64" ]; then
-              body+=$(printf '\n* **ARM64 (Recommended)**: \`docker pull %s/%s/%s-linux-arm64:%s\`' "$registry" "$repo_name" "$image_base_name" "$MINOR_ARM64")
-            fi
-
-            body+=$'\n\n**For Development/Testing:**'
-            body+=$(printf '\n* **AMD64 (Latest)**: \`docker pull %s/%s/%s-linux-amd64:latest\`' "$registry" "$repo_name" "$image_base_name")
-            body+=$(printf '\n* **ARM64 (Latest)**: \`docker pull %s/%s/%s-linux-arm64:latest\`' "$registry" "$repo_name" "$image_base_name")
-            body+=$'\n\n**🔐 Build Provenance & Supply Chain Security:**'
-
-            if [ -n "$sigstore_amd64" ] || [ -n "$sigstore_arm64" ]; then
-              body+=$'\n\n**Sigstore Transparency Log:**'
-              if [ -n "$sigstore_amd64" ]; then
-                body+=$(printf '\n* **AMD64**: [%s](%s)' "View in Sigstore" "$sigstore_amd64")
-              fi
-              if [ -n "$sigstore_arm64" ]; then
-                body+=$(printf '\n* **ARM64**: [%s](%s)' "View in Sigstore" "$sigstore_arm64")
-              fi
-            fi
-            if [ -n "$github_attestation_amd64" ] || [ -n "$github_attestation_arm64" ]; then
-              body+=$'\n\n**GitHub Attestations:**'
-              if [ -n "$github_attestation_amd64" ]; then
-                body+=$(printf '\n* **AMD64**: [%s](%s)' "View Attestation" "$github_attestation_amd64")
-              fi
-              if [ -n "$github_attestation_arm64" ]; then
-                body+=$(printf '\n* **ARM64**: [%s](%s)' "View Attestation" "$github_attestation_arm64")
-              fi
-            fi
-            body+=$'\n\n**🔐 Public Verification (No authentication required):**'
-            body+=$'\n```bash'
-            body+=$'\n# Install cosign: https://docs.sigstore.dev/cosign/installation'
-            body+=$(printf '\ncosign verify \\\n  --certificate-identity-regexp "https://github.com/%s/.github/workflows/.*" \\\n  --certificate-oidc-issuer "https://token.actions.githubusercontent.com" \\\n  %s/%s/%s-linux-amd64:%s | jq' "$repo_name" "$registry" "$repo_name" "$image_base_name" "${MINOR_AMD64:-latest}")
-            body+=$'\n'
-            body+=$(printf '\ncosign verify \\\n  --certificate-identity-regexp "https://github.com/%s/.github/workflows/.*" \\\n  --certificate-oidc-issuer "https://token.actions.githubusercontent.com" \\\n  %s/%s/%s-linux-arm64:%s | jq' "$repo_name" "$registry" "$repo_name" "$image_base_name" "${MINOR_ARM64:-latest}")
-            body+=$'\n```'
-          else
-            # Non-language base images: best practices + examples
-            base_practices="
-
-          **🎯 Non-language Base Image Best Practices:**
-          * **✅ Recommended for CI/CD**: Use \`:latest\` with \`docker build --pull ...\` - Ensures latest security patches
-          * **💡 Why use :latest tag?** Non-language base images are unlikely to introduce build issues when their version changes and it ensures you receive the latest security patches.
-         
-
-          **Dockerfile Examples:**
-
-          **For Production/CI (Recommended):**
-          * **AMD64**: \`FROM $registry/$repo_name/${image_base_name}-linux-amd64:latest\`
-          * **ARM64**: \`FROM $registry/$repo_name/${image_base_name}-linux-arm64:latest\`
-          * **Build command**: \`docker build --pull ...\`
-
-          **🔐 Build Provenance & Supply Chain Security:**"
-          
           if [ -n "$sigstore_amd64" ] || [ -n "$sigstore_arm64" ]; then
-            base_practices+=$'\n\n**Sigstore Transparency Log:**'
+            body+=$'\n\n**Sigstore Transparency Log:**'
             if [ -n "$sigstore_amd64" ]; then
-              base_practices+=$(printf '\n* **AMD64**: [%s](%s)' "View in Sigstore" "$sigstore_amd64")
+              body+=$(printf '\n* **AMD64**: [%s](%s)' "View in Sigstore" "$sigstore_amd64")
             fi
             if [ -n "$sigstore_arm64" ]; then
-              base_practices+=$(printf '\n* **ARM64**: [%s](%s)' "View in Sigstore" "$sigstore_arm64")
+              body+=$(printf '\n* **ARM64**: [%s](%s)' "View in Sigstore" "$sigstore_arm64")
             fi
           fi
           
           if [ -n "$github_attestation_amd64" ] || [ -n "$github_attestation_arm64" ]; then
-            base_practices+=$'\n\n**GitHub Attestations:**'
+            body+=$'\n\n**GitHub Attestations:**'
             if [ -n "$github_attestation_amd64" ]; then
-              base_practices+=$(printf '\n* **AMD64**: [%s](%s)' "View Attestation" "$github_attestation_amd64")
+              body+=$(printf '\n* **AMD64**: [%s](%s)' "View Attestation" "$github_attestation_amd64")
             fi
             if [ -n "$github_attestation_arm64" ]; then
-              base_practices+=$(printf '\n* **ARM64**: [%s](%s)' "View Attestation" "$github_attestation_arm64")
+              body+=$(printf '\n* **ARM64**: [%s](%s)' "View Attestation" "$github_attestation_arm64")
             fi
           fi
           
-          base_practices+=$'\n\n**🔐 Public Verification (No authentication required):**'
-          base_practices+=$'\n```bash'
-          base_practices+=$'\n# Install cosign: https://docs.sigstore.dev/cosign/installation'
-          base_practices+=$(printf '\ncosign verify \\\n  --certificate-identity-regexp "https://github.com/%s/.github/workflows/.*" \\\n  --certificate-oidc-issuer "https://token.actions.githubusercontent.com" \\\n  %s/%s/%s-linux-amd64:latest | jq' "$repo_name" "$registry" "$repo_name" "$image_base_name")
-          base_practices+=$'\n'
-          base_practices+=$(printf '\ncosign verify \\\n  --certificate-identity-regexp "https://github.com/%s/.github/workflows/.*" \\\n  --certificate-oidc-issuer "https://token.actions.githubusercontent.com" \\\n  %s/%s/%s-linux-arm64:latest | jq' "$repo_name" "$registry" "$repo_name" "$image_base_name")
-          base_practices+=$'\n```'
-            body+="$base_practices"
-          fi
+          body+=$'\n\n**🔐 Public Verification (No authentication required):**'
+          body+=$'\n\`\`\`bash'
+          body+=$'\n# Install cosign: https://docs.sigstore.dev/cosign/installation'
+          body+=$(printf '\ncosign verify \\\n  --certificate-identity-regexp "https://github.com/%s/.github/workflows/.*" \\\n  --certificate-oidc-issuer "https://token.actions.githubusercontent.com" \\\n  %s/%s/%s:latest | jq' "$repo_name" "$registry" "$repo_name" "$image_base_name")
+          body+=$'\n\`\`\`'
 
           echo "Setting BODY_TEXT environment variable..."
           echo "BODY_TEXT<<EOF" >> $GITHUB_ENV
