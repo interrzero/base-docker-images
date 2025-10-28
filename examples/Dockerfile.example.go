@@ -4,7 +4,7 @@
 
 # Build stage: Use our Go base image pinned to Go 1.25
 # NOTE: Replace :latest with current version tag from https://github.com/interrzero/base-docker-images/releases
-FROM ghcr.io/interrzero/base-docker-images/go-base-linux-amd64:latest AS builder
+FROM ghcr.io/interrzero/base-docker-images/go-1.25-base:latest AS builder
 
 USER nonroot
 WORKDIR /workspace
