@@ -64,23 +64,15 @@ Images are considered hardened when they do not contain fixed CVE vulnerabilitie
 
 ### Recommended Version Pinning
 
-The images are tagged with [Semantic Versioning](https://semver.org/) and also with the installed language's major (i.e. `python-3.13-base:3`, `nodejs-24-base:24`) and major + minor (i.e. `python-3.13-base:3.13`, `go-base:1.25`, `nodejs-24-base:24.6`) versions (currently implemented for Python, Node.js, OpenJDK, and Go).
+All images are tagged with `latest` and we recommend that you use this tag in your Dockerfiles. Because language versions are now pinned in our images, using the `:latest` tag ensures that you always have the most recent security patches and updates without introducing breaking changes.
 
-If you want to ensure that your image's installed language is not updated to a potentially non-backwards-compatible version, you can pin the version of the image you are using to the specific version of the language you want - i.e. `python-3.13-base:3.13` or `nodejs-base:24.6`.
-
-Note, however, that due to the limitations of our using Chainguard's free tier, we can only keep the latest wolfi-base image up-to-date, so once wolfi-base stops releasing updates to python 3.13 for example, we will move to python 3.14 or nodejs 25.  The `python-3.13-base:3.13` or `nodejs-20-base:24.6` will no longer be automatically patched by our workflows.  You will need to switch to the newer version of the images, such as `python-3.14-base`, which will be provided in this repository on best effort basis.
-
-On the other hand, pinning your image to `python-3.13-base:3` or `nodejs-24-base:24` for example, allows you to receive all security updates within that major version, but it will also force you to upgrade to the next minor version whenever wolfi-base is updated to that version of the language, which will bring security updates with it.
-
-Both choices have tradeoffs and is a decision you need to make based on your project's needs.
-
-The non-language-specific images, such as the `nginx-base`, `fips-base`, and `wolfi-base` images can be pinned to `:latest`, as they are unlikely to bring backwards-incompatible changes to your workloads.
+To ensure that your CI/CD pipeline always uses the latest version of the image, you should use the `--pull` flag in your `docker build` command.
 
 ## How to Use
 
 ### Ensure your base image is always fresh
 
-By default, docker build will use a cached version of a base image if it already exists in the build environment. Because your Dockerfile uses mutable tags like :latest, there's a risk that your CI/CD pipeline could use a stale base image, potentially missing critical security patches.
+By default, `docker build` will use a cached version of a base image if it already exists in the build environment. Because our Dockerfiles use the mutable `:latest` tag, there's a risk that your CI/CD pipeline could use a stale base image, potentially missing critical security patches.
 
 To prevent this, you should add the `--pull` flag to your `docker build` command. This flag explicitly tells Docker to always attempt to pull a newer version of the base image from the remote registry before starting the build.
 
