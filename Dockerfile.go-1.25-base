@@ -1,0 +1,17 @@
+FROM cgr.dev/chainguard/wolfi-base:latest@sha256:914e2a46c617144692dfcf16afb3fa1865c8e2ab44c47675f5a6c7f0b8c63ba8
+
+RUN apk update && apk add --no-cache go-1.25 bash build-base git
+
+USER nonroot
+WORKDIR /workspace
+
+# Extract Go version information and save to /tmp/versions.txt
+SHELL ["/bin/sh", "-o", "pipefail", "-c"]
+RUN go version > /tmp/go_version.txt && \
+    GO_VERSION=$(go version | cut -d' ' -f3 | sed 's/go//') && \
+    echo "go=${GO_VERSION}" > /tmp/versions.txt && \
+    GO_MAJOR=$(echo "${GO_VERSION}" | cut -d'.' -f1) && \
+    GO_MINOR="${GO_MAJOR}.$(echo "${GO_VERSION}" | cut -d'.' -f2)" && \
+    echo "go_major_tag=${GO_MAJOR}" >> /tmp/versions.txt && \
+    echo "go_minor_tag=${GO_MINOR}" >> /tmp/versions.txt && \
+    cat /tmp/versions.txt
