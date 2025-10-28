@@ -14,6 +14,34 @@ This repository is a work in progress, but the produced images are considered st
 ## Available Images
 
 [![FIPS Base](https://img.shields.io/github/v/tag/interrzero/base-docker-images?filter=release/fips-base/*&label=fips-base&style=for-the-badge&logo=lock&color=red)](https://github.com/interrzero/base-docker-images/pkgs/container/base-docker-images%2Ffips-base)
+<<<<<<< HEAD
+[![Go Base](https://img.shields.io/github/v/tag/interrzero/base-docker-images?filter=release/go-base/*&label=go-base&style=for-the-badge&logo=go&color=00ADD8)](https://github.com/interrzero/base-docker-images/pkgs/container/base-docker-images%2Fgo-base)
+[![Nginx Base](https://img.shields.io/github/v/tag/interrzero/base-docker-images?filter=release/nginx-base/*&label=nginx-base&style=for-the-badge&logo=nginx&color=009639)](https://github.com/interrzero/base-docker-images/pkgs/container/base-docker-images%2Fnginx-base)
+[![Node.js 24 Base](https://img.shields.io/github/v/tag/interrzero/base-docker-images?filter=release/nodejs-24-base/*&label=nodejs-24-base&style=for-the-badge&logo=nodedotjs&color=339933)](https://github.com/interrzero/base-docker-images/pkgs/container/base-docker-images%2Fnodejs-24-base)
+[![OpenJDK 17 Base](https://img.shields.io/github/v/tag/interrzero/base-docker-images?filter=release/openjdk-17-base/*&label=openjdk-17-base&style=for-the-badge&logo=openjdk&color=ED8B00)](https://github.com/interrzero/base-docker-images/pkgs/container/base-docker-images%2Fopenjdk-17-base)
+[![Python 3.13 Base](https://img.shields.io/github/v/tag/interrzero/base-docker-images?filter=release/python-3.13-base/*&label=python-3.13-base&style=for-the-badge&logo=python&color=3776AB)](https://github.com/interrzero/base-docker-images/pkgs/container/base-docker-images%2Fpython-3.13-base)
+[![Wolfi Base](https://img.shields.io/github/v/tag/interrzero/base-docker-images?filter=release/wolfi-base/*&label=wolfi-base&style=for-the-badge&logo=linux&color=FCC624)](https://github.com/interrzero/base-docker-images/pkgs/container/base-docker-images%2Fwolfi-base)
+
+### Latest linux/amd64 Releases
+
+* [fips-base-linux-amd64](https://github.com/interrzero/base-docker-images/pkgs/container/base-docker-images%2Ffips-base-linux-amd64)
+* [go-base-linux-amd64](https://github.com/interrzero/base-docker-images/pkgs/container/base-docker-images%2Fgo-base-linux-amd64)
+* [nginx-base-linux-amd64](https://github.com/interrzero/base-docker-images/pkgs/container/base-docker-images%2Fnginx-base-linux-amd64)
+* [nodejs-24-base-linux-amd64](https://github.com/interrzero/base-docker-images/pkgs/container/base-docker-images%2Fnodejs-24-base-linux-amd64)
+* [openjdk17-base-linux-amd64](https://github.com/interrzero/base-docker-images/pkgs/container/base-docker-images%2Fopenjdk17-base-linux-amd64)
+* [python-3.13-base-linux-amd64](https://github.com/interrzero/base-docker-images/pkgs/container/base-docker-images%2Fpython-3.13-base-linux-amd64)
+* [wolfi-base-linux-amd64](https://github.com/interrzero/base-docker-images/pkgs/container/base-docker-images%2Fwolfi-base-linux-amd64)
+
+### Latest linux/arm64 Releases
+
+* [fips-base-linux-arm64](https://github.com/interrzero/base-docker-images/pkgs/container/base-docker-images%2Ffips-base-linux-arm64)
+* [go-base-linux-arm64](https://github.com/interrzero/base-docker-images/pkgs/container/base-docker-images%2Fgo-base-linux-arm64)
+* [nginx-base-linux-arm64](https://github.com/interrzero/base-docker-images/pkgs/container/base-docker-images%2Fnginx-base-linux-arm64)
+* [nodejs-24-base-linux-arm64](https://github.com/interrzero/base-docker-images/pkgs/container/base-docker-images%2Fnodejs-24-base-linux-arm64)
+* [openjdk17-base-linux-arm64](https://github.com/interrzero/base-docker-images/pkgs/container/base-docker-images%2Fopenjdk17-base-linux-arm64)
+* [python-3.13-base-linux-arm64](https://github.com/interrzero/base-docker-images/pkgs/container/base-docker-images%2Fpython-3.13-base-linux-arm64)
+* [wolfi-base-linux-arm64](https://github.com/interrzero/base-docker-images/pkgs/container/base-docker-images%2Fwolfi-base-linux-arm64)
+=======
 
 [![Go Base](https://img.shields.io/github/v/tag/interrzero/base-docker-images?filter=release/go-base/*&label=go-base&style=for-the-badge&logo=go&color=00ADD8)](https://github.com/interrzero/base-docker-images/pkgs/container/base-docker-images%2Fgo-base)
 
@@ -33,6 +61,7 @@ This repository is a work in progress, but the produced images are considered st
 * [Node.js](https://github.com/interrzero/base-docker-images/pkgs/container/base-docker-images%2Fnodejs-base)
 * [OpenJDK](https://github.com/interrzero/base-docker-images/pkgs/container/base-docker-images%2Fopenjdk17-base)
 * [Python](https://github.com/interrzero/base-docker-images/pkgs/container/base-docker-images%2Fpython-3.13-base)
+>>>>>>> origin/main
 
 ## Hardening
 
@@ -150,7 +179,7 @@ Please see the <a href="examples/">examples</a> directory for an example nginx w
 
 ### Go Application Development
 
-For Go applications, see the <a href="examples/">examples</a> directory for a simple Go hello world example and the corresponding <a href="examples/Dockerfile.example.go">Dockerfile</a> that demonstrates how to build secure, multi-stage Go applications using our hardened base images.
+For Go applications, see the <a href="examples/">examples</a> directory for a simple Go hello world example and the corresponding <a href="examples/Dockerfile.example.go">Dockerfile</a> that.
 
 ## Contributing
 
@@ -166,26 +195,7 @@ PR to `main` with new Dockerfile in format `Dockerfile.<image-name>`. This will 
 
 ### Rebuild an Image Manually
 
-You must have permissions to push tags to this repository.
+To trigger a rebuild of an image, for example to pick up the latest security patches from the base image, you can make a trivial change to the corresponding `Dockerfile.<image-name>` file. For example, you can add a comment to the Dockerfile.
 
-1. Make sure you are on the commit that you want to create the tag from.
-2. Create tag in the format:
+Then, create a pull request with your change targeting the `main` branch. Once the pull request is merged, the "Update Image" workflow will be triggered, and a new version of the image will be built and published.
 
-   ```shell
-   git tag -a release/<docker-image-name>/vX.X.X -m "release description"
-   ```
-
-3. Push tag:
-
-   ```shell
-   git push origin <tag-name>
-   ```
-
-For example:
-
-  ```shell
-  git checkout main
-  git pull
-  git tag -a release/python-base/v0.0.2 -m "Rebuild to pickup fix for CVE-2023-43804 urllib3 MEDIUM"
-  git push origin release/python-base/v0.0.2
-  ```
