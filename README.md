@@ -14,25 +14,32 @@ This repository is a work in progress, but the produced images are considered st
 ## Available Images
 
 [![FIPS Base](https://img.shields.io/github/v/tag/interrzero/base-docker-images?filter=release/fips-base/*&label=fips-base&style=for-the-badge&logo=lock&color=red)](https://github.com/interrzero/base-docker-images/pkgs/container/base-docker-images%2Ffips-base)
-
 [![Go Base](https://img.shields.io/github/v/tag/interrzero/base-docker-images?filter=release/go-base/*&label=go-base&style=for-the-badge&logo=go&color=00ADD8)](https://github.com/interrzero/base-docker-images/pkgs/container/base-docker-images%2Fgo-base)
-
 [![Nginx Base](https://img.shields.io/github/v/tag/interrzero/base-docker-images?filter=release/nginx-base/*&label=nginx-base&style=for-the-badge&logo=nginx&color=009639)](https://github.com/interrzero/base-docker-images/pkgs/container/base-docker-images%2Fnginx-base)
+[![Node.js 24 Base](https://img.shields.io/github/v/tag/interrzero/base-docker-images?filter=release/nodejs-24-base/*&label=nodejs-24-base&style=for-the-badge&logo=nodedotjs&color=339933)](https://github.com/interrzero/base-docker-images/pkgs/container/base-docker-images%2Fnodejs-24-base)
+[![OpenJDK 17 Base](https://img.shields.io/github/v/tag/interrzero/base-docker-images?filter=release/openjdk-17-base/*&label=openjdk-17-base&style=for-the-badge&logo=openjdk&color=ED8B00)](https://github.com/interrzero/base-docker-images/pkgs/container/base-docker-images%2Fopenjdk-17-base)
+[![Python 3.13 Base](https://img.shields.io/github/v/tag/interrzero/base-docker-images?filter=release/python-3.13-base/*&label=python-3.13-base&style=for-the-badge&logo=python&color=3776AB)](https://github.com/interrzero/base-docker-images/pkgs/container/base-docker-images%2Fpython-3.13-base)
+[![Wolfi Base](https://img.shields.io/github/v/tag/interrzero/base-docker-images?filter=release/wolfi-base/*&label=wolfi-base&style=for-the-badge&logo=linux&color=FCC624)](https://github.com/interrzero/base-docker-images/pkgs/container/base-docker-images%2Fwolfi-base)
 
-[![Node.js Base](https://img.shields.io/github/v/tag/interrzero/base-docker-images?filter=release/nodejs-base/*&label=nodejs-base&style=for-the-badge&logo=nodedotjs&color=339933)](https://github.com/interrzero/base-docker-images/pkgs/container/base-docker-images%2Fnodejs-base)
+### Latest linux/amd64 Releases
 
-[![OpenJDK Base](https://img.shields.io/github/v/tag/interrzero/base-docker-images?filter=release/openjdk17-base/*&label=openjdk17-base&style=for-the-badge&logo=openjdk&color=ED8B00)](https://github.com/interrzero/base-docker-images/pkgs/container/base-docker-images%2Fopenjdk17-base)
+* [fips-base-linux-amd64](https://github.com/interrzero/base-docker-images/pkgs/container/base-docker-images%2Ffips-base-linux-amd64)
+* [go-base-linux-amd64](https://github.com/interrzero/base-docker-images/pkgs/container/base-docker-images%2Fgo-base-linux-amd64)
+* [nginx-base-linux-amd64](https://github.com/interrzero/base-docker-images/pkgs/container/base-docker-images%2Fnginx-base-linux-amd64)
+* [nodejs-24-base-linux-amd64](https://github.com/interrzero/base-docker-images/pkgs/container/base-docker-images%2Fnodejs-24-base-linux-amd64)
+* [openjdk-17-base-linux-amd64](https://github.com/interrzero/base-docker-images/pkgs/container/base-docker-images%2Fopenjdk-17-base-linux-amd64)
+* [python-3.13-base-linux-amd64](https://github.com/interrzero/base-docker-images/pkgs/container/base-docker-images%2Fpython-3.13-base-linux-amd64)
+* [wolfi-base-linux-amd64](https://github.com/interrzero/base-docker-images/pkgs/container/base-docker-images%2Fwolfi-base-linux-amd64)
 
-[![Python Base](https://img.shields.io/github/v/tag/interrzero/base-docker-images?filter=release/python-base/*&label=python-3.13-base&style=for-the-badge&logo=python&color=3776AB)](https://github.com/interrzero/base-docker-images/pkgs/container/base-docker-images%2Fpython-3.13-base)
+### Latest linux/arm64 Releases
 
-[![Wolfi Base](https://img.shields.io/github/v/tag/interrzero/base-docker-images?filter=release/wolfi-base/*&label=wolfi-base&style=for-the-badge&logo=linux&color=FCC624)](https://github.com/interrzero/base-docker-images/pkgs/container/base-docker-images%2Fwolfi-base) 
- 
-### Latest Language Releases
-
-* [Go](https://github.com/interrzero/base-docker-images/pkgs/container/base-docker-images%2Fgo-base)
-* [Node.js](https://github.com/interrzero/base-docker-images/pkgs/container/base-docker-images%2Fnodejs-base)
-* [OpenJDK](https://github.com/interrzero/base-docker-images/pkgs/container/base-docker-images%2Fopenjdk17-base)
-* [Python](https://github.com/interrzero/base-docker-images/pkgs/container/base-docker-images%2Fpython-3.13-base)
+* [fips-base-linux-arm64](https://github.com/interrzero/base-docker-images/pkgs/container/base-docker-images%2Ffips-base-linux-arm64)
+* [go-base-linux-arm64](https://github.com/interrzero/base-docker-images/pkgs/container/base-docker-images%2Fgo-base-linux-arm64)
+* [nginx-base-linux-arm64](https://github.com/interrzero/base-docker-images/pkgs/container/base-docker-images%2Fnginx-base-linux-arm64)
+* [nodejs-24-base-linux-arm64](https://github.com/interrzero/base-docker-images/pkgs/container/base-docker-images%2Fnodejs-24-base-linux-arm64)
+* [openjdk-17-base-linux-arm64](https://github.com/interrzero/base-docker-images/pkgs/container/base-docker-images%2Fopenjdk-17-base-linux-arm64)
+* [python-3.13-base-linux-arm64](https://github.com/interrzero/base-docker-images/pkgs/container/base-docker-images%2Fpython-3.13-base-linux-arm64)
+* [wolfi-base-linux-arm64](https://github.com/interrzero/base-docker-images/pkgs/container/base-docker-images%2Fwolfi-base-linux-arm64)
 
 ## Hardening
 
