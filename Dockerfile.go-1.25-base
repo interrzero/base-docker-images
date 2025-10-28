@@ -1,4 +1,4 @@
-FROM cgr.dev/chainguard/wolfi-base:latest@sha256:914e2a46c617144692dfcf16afb3fa1865c8e2ab44c47675f5a6c7f0b8c63ba8
+FROM cgr.dev/chainguard/wolfi-base:latest
 
 RUN apk update && apk add --no-cache go-1.25 bash build-base git
 
