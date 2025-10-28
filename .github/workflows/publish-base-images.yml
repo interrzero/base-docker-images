@@ -883,6 +883,38 @@ jobs:
             echo "::warning::Package visibility could not be set to public, but build will continue."
           fi
 
+      - name: Verify Package is Public for ${{ matrix.platform }}
+        if: steps.docker_build.outputs.digest != '' && steps.owner_type.outputs.api_path_segment != '' && github.event_name == 'push' && github.ref_type == 'tag'
+        env:
+          PACKAGE_NAME: ${{ github.event.repository.name }}/${{ steps.context.outputs.image-name }}
+          OWNER: ${{ github.repository_owner }}
+          API_PATH_SEGMENT: ${{ steps.owner_type.outputs.api_path_segment }}
+          # GH_TOKEN is inherited from the job-level env
+        run: |
+          ENCODED_PACKAGE_NAME=$(echo "$PACKAGE_NAME" | sed 's|/|%2F|g')
+          API_URL_PATH="/${API_PATH_SEGMENT}/${OWNER}/packages/container/${ENCODED_PACKAGE_NAME}"
+          
+          echo "Verifying visibility for package: $PACKAGE_NAME"
+          
+          max_attempts=3
+          attempt_num=1
+          while [ $attempt_num -le $max_attempts ]; do
+            VISIBILITY=$(gh api "$API_URL_PATH" --jq .visibility --silent 2>/dev/null | tr -d '"')
+            if [ "$VISIBILITY" = "public" ]; then
+              echo "✅ Verification successful: Package '$PACKAGE_NAME' is public."
+              exit 0
+            fi
+            
+            if [ $attempt_num -lt $max_attempts ]; then
+              echo "Attempt $attempt_num: Package not public yet (current: '$VISIBILITY'). Retrying in 5 seconds..."
+              sleep 5
+            fi
+            ((attempt_num++))
+          done
+          
+          echo "::error::Verification failed: Package '$PACKAGE_NAME' is not public after multiple checks. Final visibility: '$VISIBILITY'."
+          exit 1
+
   create_release:
     runs-on: ubuntu-latest
     needs: publish_image
