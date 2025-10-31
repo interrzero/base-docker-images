@@ -49,24 +49,19 @@ jobs:
         id: determine_images
         run: |
           images_to_build=()
-          for dockerfile in $(find . -maxdepth 1 -name 'Dockerfile.*'); do
-            image_name=$(echo "$dockerfile" | sed 's|./Dockerfile\.||' | grep -vE '^(go-base|nodejs-base|python-base)$')
-            latest_tag=$(git for-each-ref --sort='-v:refname' --format '%(refname:short)' refs/tags/release/$image_name | head -n 1)
-
-            if [ -z "$latest_tag" ]; then
-              echo "No tags found for $image_name, adding to build matrix."
-              images_to_build+=("$image_name")
-              continue
-            fi
-
-            if ! git diff --quiet $latest_tag HEAD -- "$dockerfile"; then
-              echo "$dockerfile has changed since last tag ($latest_tag), adding to build matrix."
-              images_to_build+=("$image_name")
-            fi
-          done
+          if [ -z "${{ github.event.inputs.images }}" ]; then
+            echo "No images specified, building all images."
+            images_to_build=($(find . -maxdepth 1 -name 'Dockerfile.*' -type f -printf '%f\n' | sed 's/^Dockerfile\.//' | sort -u))
+          else
+            echo "Building specified images: ${{ github.event.inputs.images }}"
+            IFS=',' read -ra ADDR <<< "${{ github.event.inputs.images }}"
+            for i in "${ADDR[@]}"; do
+              images_to_build+=("$i")
+            done
+          fi
 
           if [ ${#images_to_build[@]} -eq 0 ]; then
-            echo "No Dockerfile changes detected."
+            echo "No images to build."
             echo "images_to_build=[]" >> $GITHUB_OUTPUT
             echo "has_changes=false" >> $GITHUB_OUTPUT
           else
@@ -79,6 +74,7 @@ jobs:
             echo "images_to_build=$output_string" >> $GITHUB_OUTPUT
             echo "has_changes=true" >> $GITHUB_OUTPUT
           fi
+
 
       - name: Create and push release tags
         if: steps.determine_images.outputs.has_images == 'true'
