@@ -29,13 +29,16 @@ jobs:
         id: build_matrix
         run: |
           # get changed Dockerfiles from git diff
-          # Use HEAD~1 and HEAD for push events to ensure we always have a valid range
-          if [ -z "${{ github.event.before }}" ] || [ "${{ github.event.before }}" = "0000000000000000000000000000000000000000" ]; then
-            echo "No before commit, comparing HEAD~1..HEAD"
-            changed_files=$(git diff --name-only HEAD~1 HEAD | grep '^Dockerfile\.' | xargs || true)
+          if [ "${{ github.event_name }}" == "pull_request" ]; then
+            # For PRs, compare with the base branch
+            changed_files=$(git diff --name-only ${{ github.event.pull_request.base.sha }}...${{ github.event.pull_request.head.sha }} | grep '^Dockerfile\.' | xargs || true)
           else
-            echo "Comparing ${{ github.event.before }}..${{ github.event.after }}"
+            # For pushes, compare with the previous commit
             changed_files=$(git diff --name-only ${{ github.event.before }} ${{ github.event.after }} | grep '^Dockerfile\.' | xargs || true)
+            # Fallback for merge commits where the above diff might be empty
+            if [ -z "$changed_files" ]; then
+              changed_files=$(git diff --name-only ${{ github.event.after }}~1...${{ github.event.after }} | grep '^Dockerfile\.' | xargs || true)
+            fi
           fi
           echo "Changed files: $changed_files"
           echo "changed_dockerfiles=$changed_files" >> $GITHUB_OUTPUT
