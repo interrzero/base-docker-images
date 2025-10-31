@@ -48,6 +48,7 @@ jobs:
       - name: Determine images to build
         id: determine_images
         run: |
+          git fetch origin main
           # Function to increment patch version
           increment_version() {
             local version=$1
@@ -82,7 +83,7 @@ jobs:
             fi
           }
 
-          all_images=(fips-base go-base nginx-base nodejs-base python-base wolfi-base openjdk17-base)
+          all_images=($(find . -maxdepth 1 -name 'Dockerfile.*' -type f -printf '%f\n' | sed 's/^Dockerfile\.//' | sort -u))
           images_to_build=()
 
           echo "Input parameters:"
