@@ -177,6 +177,16 @@ PR to `main` with new Dockerfile in format `Dockerfile.<image-name>`. This will 
 2. Workflow will diff which Dockerfiles changed and create release tags for them.
 3. Workflow triggered by creation of new release tag will build new Docker image, incrementing the patch version and setting it to `latest`.
 
+### Automated Rebuilds
+
+This repository is configured with a daily workflow that automatically scans for and rebuilds images that are out-of-date. This serves as both a safeguard to ensure all changes are eventually built and a way to accelerate the release of security patches and other updates. A rebuild is triggered for an image if any of the following conditions are met:
+
+*   **Unreleased Changes:** The `Dockerfile.*` has been modified since its last release.
+*   **Base Image Updates:** The base image specified in the `FROM` instruction has a newer version available.
+*   **Security Vulnerabilities:** The daily security scan detects fixable vulnerabilities of `MEDIUM` severity or higher.
+
+This process ensures that the `:latest` tag for each image always includes the most recent security patches and updates.
+
 ### Rebuild an Image Manually
 
 To trigger a rebuild of an image, for example to pick up the latest security patches from the base image, you can make a trivial change to the corresponding `Dockerfile.<image-name>` file. For example, you can add a comment to the Dockerfile.

@@ -72,6 +72,25 @@ jobs:
         run: |
           set -e # Exit on most errors, but parsing/scan failures handled below
 
+          dockerfile_has_changed() {
+            local image=$1
+            local dockerfile="Dockerfile.$image"
+            local latest_tag=$(git for-each-ref --sort='-v:refname' --format '%(refname:short)' refs/tags/release/$image | head -n 1)
+
+            if [ -z "$latest_tag" ]; then
+              # No previous tag, so it has definitely "changed"
+              return 0
+            fi
+
+            if ! git diff --quiet $latest_tag HEAD -- "$dockerfile"; then
+              # The file has changed
+              return 0
+            else
+              # The file has not changed
+              return 1
+            fi
+          }
+
           needs_rebuild_list=""
 
           if [ -z "$IMAGE_BASE_NAMES" ]; then
@@ -171,6 +190,13 @@ jobs:
               echo "✅ No fixable vulnerabilities found for $base_name"
               rebuild_reason="No fixable vulnerabilities found."
             fi
+
+            if dockerfile_has_changed "$base_name"; then
+              echo "Dockerfile.$base_name has changed since its last release."
+              needs_rebuild_list="${needs_rebuild_list} ${base_name}"
+              rebuild_reason="Dockerfile has unreleased changes."
+            fi
+
             echo "Decision for $base_name: $rebuild_reason"
           done # End base_name loop
 
