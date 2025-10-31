@@ -14,11 +14,17 @@ This repository is a work in progress, but the produced images are considered st
 ## Available Images
 
 [![FIPS Base](https://img.shields.io/github/v/tag/interrzero/base-docker-images?filter=release/fips-base/*&label=fips-base&style=for-the-badge&logo=lock&color=red)](https://github.com/interrzero/base-docker-images/pkgs/container/base-docker-images%2Ffips-base)
+
 [![Go 1.25 Base](https://img.shields.io/github/v/tag/interrzero/base-docker-images?filter=release/go-1.25-base/*&label=go-1.25-base&style=for-the-badge&logo=go&color=00ADD8)](https://github.com/interrzero/base-docker-images/pkgs/container/base-docker-images%2Fgo-1.25-base)
+
 [![Nginx Base](https://img.shields.io/github/v/tag/interrzero/base-docker-images?filter=release/nginx-base/*&label=nginx-base&style=for-the-badge&logo=nginx&color=009639)](https://github.com/interrzero/base-docker-images/pkgs/container/base-docker-images%2Fnginx-base)
+
 [![Node.js 24 Base](https://img.shields.io/github/v/tag/interrzero/base-docker-images?filter=release/nodejs-24-base/*&label=nodejs-24-base&style=for-the-badge&logo=nodedotjs&color=339933)](https://github.com/interrzero/base-docker-images/pkgs/container/base-docker-images%2Fnodejs-24-base)
+
 [![OpenJDK 17 Base](https://img.shields.io/github/v/tag/interrzero/base-docker-images?filter=release/openjdk-17-base/*&label=openjdk-17-base&style=for-the-badge&logo=openjdk&color=ED8B00)](https://github.com/interrzero/base-docker-images/pkgs/container/base-docker-images%2Fopenjdk-17-base)
+
 [![Python 3.13 Base](https://img.shields.io/github/v/tag/interrzero/base-docker-images?filter=release/python-3.13-base/*&label=python-3.13-base&style=for-the-badge&logo=python&color=3776AB)](https://github.com/interrzero/base-docker-images/pkgs/container/base-docker-images%2Fpython-3.13-base)
+
 [![Wolfi Base](https://img.shields.io/github/v/tag/interrzero/base-docker-images?filter=release/wolfi-base/*&label=wolfi-base&style=for-the-badge&logo=linux&color=FCC624)](https://github.com/interrzero/base-docker-images/pkgs/container/base-docker-images%2Fwolfi-base)
 
 ### Latest linux/amd64 Releases
