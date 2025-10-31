@@ -250,7 +250,7 @@ jobs:
           
           case "$image_name" in
             # Language images - extract runtime versions from /tmp/versions.txt
-            "python-base"|"nodejs-base"|"openjdk17-base"|"go-base")
+            "python-*-base"|"nodejs-*-base"|"openjdk-*-base"|"go-*-base")
               echo "Language image detected, extracting runtime versions..."
               
               if docker run --rm --platform ${{ matrix.platform }} \
@@ -262,19 +262,19 @@ jobs:
                 
                 # Parse based on image type
                 case "$image_name" in
-                  "python-base")
+                  "python-*-base")
                     MAJOR_TAG=$(grep "python_major_tag=" versions.txt | cut -d'=' -f2)
                     MINOR_TAG=$(grep "python_minor_tag=" versions.txt | cut -d'=' -f2)
                     ;;
-                  "nodejs-base")
+                  "nodejs-*-base")
                     MAJOR_TAG=$(grep "nodejs_major_tag=" versions.txt | cut -d'=' -f2)
                     MINOR_TAG=$(grep "nodejs_minor_tag=" versions.txt | cut -d'=' -f2)
                     ;;
-                  "openjdk17-base")
+                  "openjdk-*-base")
                     MAJOR_TAG=$(grep "java_major_tag=" versions.txt | cut -d'=' -f2)
                     MINOR_TAG=$(grep "java_minor_tag=" versions.txt | cut -d'=' -f2)
                     ;;
-                  "go-base")
+                  "go-*-base")
                     MAJOR_TAG=$(grep "go_major_tag=" versions.txt | cut -d'=' -f2)
                     MINOR_TAG=$(grep "go_minor_tag=" versions.txt | cut -d'=' -f2)
                     ;;
