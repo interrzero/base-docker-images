@@ -27,7 +27,7 @@ This repository is a work in progress, but the produced images are considered st
 * [go-1.25-base-linux-amd64](https://github.com/interrzero/base-docker-images/pkgs/container/base-docker-images%2Fgo-1.25-base-linux-amd64)
 * [nginx-base-linux-amd64](https://github.com/interrzero/base-docker-images/pkgs/container/base-docker-images%2Fnginx-base-linux-amd64)
 * [nodejs-24-base-linux-amd64](https://github.com/interrzero/base-docker-images/pkgs/container/base-docker-images%2Fnodejs-24-base-linux-amd64)
-* [openjdk17-base-linux-amd64](https://github.com/interrzero/base-docker-images/pkgs/container/base-docker-images%2Fopenjdk17-base-linux-amd64)
+* [openjdk-17-base-linux-amd64](https://github.com/interrzero/base-docker-images/pkgs/container/base-docker-images%2Fopenjdk-17-base-linux-amd64)
 * [python-3.13-base-linux-amd64](https://github.com/interrzero/base-docker-images/pkgs/container/base-docker-images%2Fpython-3.13-base-linux-amd64)
 * [wolfi-base-linux-amd64](https://github.com/interrzero/base-docker-images/pkgs/container/base-docker-images%2Fwolfi-base-linux-amd64)
 
@@ -37,7 +37,7 @@ This repository is a work in progress, but the produced images are considered st
 * [go-1.25-base-linux-arm64](https://github.com/interrzero/base-docker-images/pkgs/container/base-docker-images%2Fgo-1.25-base-linux-arm64)
 * [nginx-base-linux-arm64](https://github.com/interrzero/base-docker-images/pkgs/container/base-docker-images%2Fnginx-base-linux-arm64)
 * [nodejs-24-base-linux-arm64](https://github.com/interrzero/base-docker-images/pkgs/container/base-docker-images%2Fnodejs-24-base-linux-arm64)
-* [openjdk17-base-linux-arm64](https://github.com/interrzero/base-docker-images/pkgs/container/base-docker-images%2Fopenjdk17-base-linux-arm64)
+* [openjdk-17-base-linux-arm64](https://github.com/interrzero/base-docker-images/pkgs/container/base-docker-images%2Fopenjdk-17-base-linux-arm64)
 * [python-3.13-base-linux-arm64](https://github.com/interrzero/base-docker-images/pkgs/container/base-docker-images%2Fpython-3.13-base-linux-arm64)
 * [wolfi-base-linux-arm64](https://github.com/interrzero/base-docker-images/pkgs/container/base-docker-images%2Fwolfi-base-linux-arm64)
 

@@ -88,7 +88,7 @@ RUN bash -c 'echo "Verifying Java and Maven installation as $(whoami)..." && \
 # Use this base image to compile your application.
 #
 # # Use the appropriate base image tag and platform
-# FROM ghcr.io/interrzero/base-docker-images/openjdk17-base-linux-amd64:latest AS builder 
+# FROM ghcr.io/interrzero/base-docker-images/openjdk-17-base-linux-amd64:latest AS builder 
 #
 # # Set the working directory within the nonroot user's home
 # WORKDIR /home/nonroot/app
@@ -112,7 +112,7 @@ RUN bash -c 'echo "Verifying Java and Maven installation as $(whoami)..." && \
 # --- Stage 2: Runtime ---
 # Use the same lean base image for the final runtime environment.
 #
-# FROM ghcr.io/interrzero/base-docker-images/openjdk17-base-linux-amd64:latest AS runtime 
+# FROM ghcr.io/interrzero/base-docker-images/openjdk-17-base-linux-amd64:latest AS runtime 
 #
 # # Set the application's working directory
 # WORKDIR /app
