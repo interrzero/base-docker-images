@@ -28,42 +28,36 @@ jobs:
       - name: Detect changed Dockerfiles and build matrix
         id: build_matrix
         run: |
-          # get changed Dockerfiles from git diff
-          if [ "${{ github.event_name }}" == "pull_request" ]; then
-            # For PRs, compare with the base branch
-            changed_files=$(git diff --name-only ${{ github.event.pull_request.base.sha }}...${{ github.event.pull_request.head.sha }} | grep '^Dockerfile\.' | xargs || true)
-          else
-            # For pushes, compare with the previous commit
-            changed_files=$(git diff --name-only ${{ github.event.before }} ${{ github.event.after }} | grep '^Dockerfile\.' | xargs || true)
-            # Fallback for merge commits where the above diff might be empty
-            if [ -z "$changed_files" ]; then
-              changed_files=$(git diff --name-only ${{ github.event.after }}~1...${{ github.event.after }} | grep '^Dockerfile\.' | xargs || true)
+          images_to_build=()
+          for dockerfile in $(find . -maxdepth 1 -name 'Dockerfile.*'); do
+            image_name=$(echo "$dockerfile" | sed 's|./Dockerfile\.||')
+            latest_tag=$(git for-each-ref --sort='-v:refname' --format '%(refname:short)' refs/tags/release/$image_name | head -n 1)
+
+            if [ -z "$latest_tag" ]; then
+              echo "No tags found for $image_name, adding to build matrix."
+              images_to_build+=("$image_name")
+              continue
             fi
-          fi
-          echo "Changed files: $changed_files"
-          echo "changed_dockerfiles=$changed_files" >> $GITHUB_OUTPUT
 
-          # get image names from Dockerfile extensions
-          if [ -n "$changed_files" ]; then
-            images=$(for filename in $changed_files; do \
-              echo -n "${filename#Dockerfile.} "; done)
+            if ! git diff --quiet $latest_tag HEAD -- "$dockerfile"; then
+              echo "$dockerfile has changed since last tag ($latest_tag), adding to build matrix."
+              images_to_build+=("$image_name")
+            fi
+          done
 
-            # create JSON array for matrix (e.g., ["nodejs-base", "wolfi-base"])
-            image_array=($images)
-            output_string="["
-            for item in "${image_array[@]}"; do
-              output_string+="\"$item\", "
-            done
-            # Remove trailing comma and space, add closing bracket
-            output_string=$(echo "$output_string" | sed 's/, $//')"]"
-
-            echo "images_to_build=$output_string" >> $GITHUB_OUTPUT
-            echo "has_changes=true" >> $GITHUB_OUTPUT
-            echo "Found changed images: $images"
-          else
+          if [ ${#images_to_build[@]} -eq 0 ]; then
+            echo "No Dockerfile changes detected."
             echo "images_to_build=[]" >> $GITHUB_OUTPUT
             echo "has_changes=false" >> $GITHUB_OUTPUT
-            echo "No Dockerfile changes detected"
+          else
+            echo "Found changed images: ${images_to_build[@]}"
+            output_string="["
+            for item in "${images_to_build[@]}"; do
+              output_string+="\"$item\", "
+            done
+            output_string=$(echo "$output_string" | sed 's/, $//')"]"
+            echo "images_to_build=$output_string" >> $GITHUB_OUTPUT
+            echo "has_changes=true" >> $GITHUB_OUTPUT
           fi
 
       - name: Exit early if no changes
