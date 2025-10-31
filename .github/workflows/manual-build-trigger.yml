@@ -62,7 +62,7 @@ jobs:
 
           if [ ${#images_to_build[@]} -eq 0 ]; then
             echo "No images to build."
-            echo "images_to_build=" >> $GITHUB_OUTPUT
+            echo "images_to_build=[]" >> $GITHUB_OUTPUT
             echo "has_images=false" >> $GITHUB_OUTPUT
           else
             echo "Found changed images: ${images_to_build[@]}"
