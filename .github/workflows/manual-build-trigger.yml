@@ -50,7 +50,7 @@ jobs:
         run: |
           images_to_build=()
           for dockerfile in $(find . -maxdepth 1 -name 'Dockerfile.*'); do
-            image_name=$(echo "$dockerfile" | sed 's|./Dockerfile\.||' | grep -vE '^(go|nodejs|python)-base')
+            image_name=$(echo "$dockerfile" | sed 's|./Dockerfile\.||' | grep -vE '^(go-base|nodejs-base|python-base)$')
             latest_tag=$(git for-each-ref --sort='-v:refname' --format '%(refname:short)' refs/tags/release/$image_name | head -n 1)
 
             if [ -z "$latest_tag" ]; then
