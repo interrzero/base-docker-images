@@ -62,17 +62,12 @@ jobs:
 
           if [ ${#images_to_build[@]} -eq 0 ]; then
             echo "No images to build."
-            echo "images_to_build=[]" >> $GITHUB_OUTPUT
-            echo "has_changes=false" >> $GITHUB_OUTPUT
+            echo "images_to_build=" >> $GITHUB_OUTPUT
+            echo "has_images=false" >> $GITHUB_OUTPUT
           else
             echo "Found changed images: ${images_to_build[@]}"
-            output_string="["
-            for item in "${images_to_build[@]}"; do
-              output_string+="\"$item\", "
-            done
-            output_string=$(echo "$output_string" | sed 's/, $//')"]"
-            echo "images_to_build=$output_string" >> $GITHUB_OUTPUT
-            echo "has_changes=true" >> $GITHUB_OUTPUT
+            echo "images_to_build=${images_to_build[@]}" >> $GITHUB_OUTPUT
+            echo "has_images=true" >> $GITHUB_OUTPUT
           fi
 
 
@@ -96,8 +91,7 @@ jobs:
             git tag -l "release/$image/v*" | sort -V | tail -1
           }
 
-          images_json='${{ steps.determine_images.outputs.images_json }}'
-          images=$(echo "$images_json" | jq -r '.[]')
+          images="${{ steps.determine_images.outputs.images_to_build }}"
           
           echo "🏷️  Creating release tags..."
           
@@ -124,8 +118,8 @@ jobs:
       - name: Build summary
         if: steps.determine_images.outputs.has_images == 'true'
         run: |
-          images_json='${{ steps.determine_images.outputs.images_json }}'
-          image_count=$(echo "$images_json" | jq length)
+          images="${{ steps.determine_images.outputs.images_to_build }}"
+          image_count=$(echo "$images" | wc -w)
           
           echo ""
           echo "📊 Build Summary"
