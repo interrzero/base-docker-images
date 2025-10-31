@@ -77,6 +77,16 @@ jobs:
           tag: ${{ env.TAG }}
           platform: ${{ matrix.platform }}
 
+      - name: Filter out deprecated images
+        id: filter
+        run: |
+          if [[ "${{ steps.context.outputs.image-base-name }}" == "go-base" || "${{ steps.context.outputs.image-base-name }}" == "nodejs-base" || "${{ steps.context.outputs.image-base-name }}" == "python-base" ]]; then
+            echo "Skipping deprecated image: ${{ steps.context.outputs.image-base-name }}"
+            echo "should_build=false" >> $GITHUB_OUTPUT
+          else
+            echo "should_build=true" >> $GITHUB_OUTPUT
+          fi
+
       - name: Check if Dockerfile changed for this image
         id: dockerfile_check
         run: |
