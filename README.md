@@ -193,3 +193,11 @@ To trigger a rebuild of an image, for example to pick up the latest security pat
 
 Then, create a pull request with your change targeting the `main` branch. Once the pull request is merged, the "Update Image" workflow will be triggered, and a new version of the image will be built and published.
 
+## Credits
+
+We would like to extend our sincere gratitude to **Chainguard** for their invaluable contribution to the open-source community. Their dedication to security and innovation has provided us with the hardened, minimal base images that are the foundation of this project.
+
+The images provided by Chainguard are not only free but also meticulously maintained and regularly updated, allowing us to build and distribute our own secure base images with confidence.
+
+To learn more about Chainguard and their mission to secure the software supply chain, please visit their website: [chainguard.dev](https://www.chainguard.dev/)
+
