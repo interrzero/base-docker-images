@@ -49,8 +49,8 @@ jobs:
           fetch-depth: 0  # Need full history for git diff comparisons
 
       - name: Detect image for PR builds
+        if: steps.filter.outputs.should_build == 'true'
         id: detect_image
-        if: github.event_name == 'pull_request'
         run: |
           modified_dockerfile=$(git diff --name-only ${{ github.event.pull_request.base.sha }} ${{ github.sha }} | grep "^Dockerfile\." | head -n 1)
           if [ -n "$modified_dockerfile" ]; then
@@ -65,29 +65,21 @@ jobs:
           fi
 
       - name: Exit early if no Dockerfile changes in PR
-        if: github.event_name == 'pull_request' && steps.detect_image.outputs.dockerfile_found != 'true'
+        if: steps.filter.outputs.should_build == 'true' && github.event_name == 'pull_request' && steps.detect_image.outputs.dockerfile_found != 'true'
         run: |
           echo "No Dockerfile changes detected in PR, exiting."
           exit 0
 
       - name: Parse image context
+        if: steps.filter.outputs.should_build == 'true'
         id: context
         uses: ./.github/actions/parse-image-context
         with:
           tag: ${{ env.TAG }}
           platform: ${{ matrix.platform }}
 
-      - name: Filter out deprecated images
-        id: filter
-        run: |
-          if [[ "${{ steps.context.outputs.image-base-name }}" == "go-base" || "${{ steps.context.outputs.image-base-name }}" == "nodejs-base" || "${{ steps.context.outputs.image-base-name }}" == "python-base" ]]; then
-            echo "Skipping deprecated image: ${{ steps.context.outputs.image-base-name }}"
-            echo "should_build=false" >> $GITHUB_OUTPUT
-          else
-            echo "should_build=true" >> $GITHUB_OUTPUT
-          fi
-
       - name: Check if Dockerfile changed for this image
+        if: steps.filter.outputs.should_build == 'true'
         id: dockerfile_check
         run: |
           # For non-tag pushes, always proceed
@@ -116,14 +108,14 @@ jobs:
           fi
 
       - name: Exit early if Dockerfile unchanged
-        if: steps.dockerfile_check.outputs.dockerfile_changed != 'true'
+        if: steps.filter.outputs.should_build == 'true' && steps.dockerfile_check.outputs.dockerfile_changed != 'true'
         run: |
           echo "Did not detect any modified Dockerfiles in this commit, exiting."
           exit 0
 
       - name: Check if image already exists for this tag
+        if: steps.filter.outputs.should_build == 'true' && github.event_name == 'push' && github.ref_type == 'tag'
         id: image_exists
-        if: github.event_name == 'push' && github.ref_type == 'tag'
         run: |
           image_name="${{ env.REGISTRY }}/${{ github.repository }}/${{ steps.context.outputs.image-name }}"
           tag="${{ steps.context.outputs.version }}"
@@ -139,7 +131,7 @@ jobs:
           fi
 
       - name: Exit early if image already published
-        if: github.event_name == 'push' && github.ref_type == 'tag' && steps.image_exists.outputs.image_exists == 'true'
+        if: steps.filter.outputs.should_build == 'true' && github.event_name == 'push' && github.ref_type == 'tag' && steps.image_exists.outputs.image_exists == 'true'
         run: |
           echo "Image already published for this tag, skipping build."
           exit 0
