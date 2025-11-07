@@ -73,8 +73,7 @@ jobs:
           tag: ${{ env.TAG }}
           platform: ${{ matrix.platform }}
 
-      - name: Check if Dockerfile exists
-        
+      - name: Check if Dockerfile exists        
         id: file_check
         run: |
           dockerfile_path="Dockerfile.${{ steps.context.outputs.image-base-name }}"
@@ -87,7 +86,7 @@ jobs:
           fi
 
       - name: Exit early if Dockerfile does not exist
-         && steps.file_check.outputs.dockerfile_exists != 'true'
+         if: steps.file_check.outputs.dockerfile_exists != 'true'
         run: |
           echo "Dockerfile for ${{ steps.context.outputs.image-base-name }} does not exist. Halting build."
           # This is not a failure, but a graceful stop.
