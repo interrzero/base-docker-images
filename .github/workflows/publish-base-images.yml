@@ -55,10 +55,15 @@ jobs:
           modified_dockerfile=$(git diff --name-only ${{ github.event.pull_request.base.sha }} ${{ github.sha }} | grep "^Dockerfile\." | head -n 1)
           if [ -n "$modified_dockerfile" ]; then
             detected_image=$(echo "$modified_dockerfile" | sed 's/^Dockerfile\.//')
-            detected_tag="release/${detected_image}/v0.0.0-pr"
-            echo "TAG=$detected_tag" >> $GITHUB_ENV
-            echo "dockerfile_found=true" >> $GITHUB_OUTPUT
-            echo "Detected image from PR: $detected_image, using tag: $detected_tag"
+            if [[ "$detected_image" == "go-base" || "$detected_image" == "nodejs-base" || "$detected_image" == "python-base" ]]; then
+              echo "PR modifies a deprecated image ($detected_image). Halting build for this image."
+              echo "dockerfile_found=false" >> $GITHUB_OUTPUT
+            else
+              detected_tag="release/${detected_image}/v0.0.0-pr"
+              echo "TAG=$detected_tag" >> $GITHUB_ENV
+              echo "dockerfile_found=true" >> $GITHUB_OUTPUT
+              echo "Detected image from PR: $detected_image, using tag: $detected_tag"
+            fi
           else
             echo "dockerfile_found=false" >> $GITHUB_OUTPUT
             echo "No Dockerfile changes detected in PR, will exit early"
