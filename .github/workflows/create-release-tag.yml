@@ -29,11 +29,8 @@ jobs:
         id: build_matrix
         run: |
           images_to_build=()
-          for dockerfile in $(find . -maxdepth 1 -name 'Dockerfile.*'); do
+          for dockerfile in $(find . -maxdepth 1 -name 'Dockerfile.*' ! -name 'deprecated.Dockerfile.*'); do
             image_name=$(echo "$dockerfile" | sed 's|./Dockerfile\.||')
-            if [[ "$image_name" == "go-base" || "$image_name" == "nodejs-base" || "$image_name" == "python-base" ]]; then
-              continue
-            fi
             latest_tag=$(git for-each-ref --sort='-v:refname' --format '%(refname:short)' refs/tags/release/$image_name | head -n 1)
 
             if [ -z "$latest_tag" ]; then
