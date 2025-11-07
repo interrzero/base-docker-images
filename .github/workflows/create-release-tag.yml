@@ -29,7 +29,12 @@ jobs:
         id: build_matrix
         run: |
           images_to_build=()
+          # Find all Dockerfiles that are not deprecated
           for dockerfile in $(find . -maxdepth 1 -name 'Dockerfile.*' ! -name 'deprecated.Dockerfile.*'); do
+            # Ensure we only check files that exist in the current HEAD
+            if [ ! -f "$dockerfile" ]; then
+              continue
+            fi
             image_name=$(echo "$dockerfile" | sed 's|./Dockerfile\.||')
             latest_tag=$(git for-each-ref --sort='-v:refname' --format '%(refname:short)' refs/tags/release/$image_name | head -n 1)
 
@@ -39,6 +44,7 @@ jobs:
               continue
             fi
 
+            # Check if the Dockerfile has changed since the last tag
             if ! git diff --quiet $latest_tag HEAD -- "$dockerfile"; then
               echo "$dockerfile has changed since last tag ($latest_tag), adding to build matrix."
               images_to_build+=("$image_name")

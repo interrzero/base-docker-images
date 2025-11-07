@@ -83,6 +83,27 @@ jobs:
           tag: ${{ env.TAG }}
           platform: ${{ matrix.platform }}
 
+      - name: Check if Dockerfile exists
+        if: steps.filter.outputs.should_build == 'true'
+        id: file_check
+        run: |
+          dockerfile_path="Dockerfile.${{ steps.context.outputs.image-base-name }}"
+          if [ -f "$dockerfile_path" ]; then
+            echo "Dockerfile found at $dockerfile_path"
+            echo "dockerfile_exists=true" >> $GITHUB_OUTPUT
+          else
+            echo "Dockerfile not found at $dockerfile_path"
+            echo "dockerfile_exists=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Exit early if Dockerfile does not exist
+        if: steps.filter.outputs.should_build == 'true' && steps.file_check.outputs.dockerfile_exists != 'true'
+        run: |
+          echo "Dockerfile for ${{ steps.context.outputs.image-base-name }} does not exist. Halting build."
+          # This is not a failure, but a graceful stop.
+          exit 0
+
+
       - name: Check if Dockerfile changed for this image
         if: steps.filter.outputs.should_build == 'true'
         id: dockerfile_check
