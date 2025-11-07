@@ -35,7 +35,7 @@ jobs:
       - name: Filter out deprecated images
         id: filter
         run: |
-          if [[ "${{ env.TAG }}" == *"go-base"* || "${{ env.TAG }}" == *"nodejs-base"* || "${{ env.TAG }}" == *"python-base"* ]]; then
+          if echo "${{ env.TAG }}" | grep -qE "go-base|nodejs-base|python-base"; then
             echo "Skipping deprecated image: ${{ env.TAG }}"
             echo "should_build=false" >> $GITHUB_OUTPUT
           else
