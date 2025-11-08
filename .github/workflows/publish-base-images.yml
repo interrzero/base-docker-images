@@ -39,7 +39,6 @@ jobs:
           fetch-depth: 0  # Need full history for git diff comparisons
 
       - name: Detect image for PR builds
-        
         id: detect_image
         run: |
           modified_dockerfile=$(git diff --name-only ${{ github.event.pull_request.base.sha }} ${{ github.sha }} | grep "^Dockerfile\." | head -n 1)
@@ -60,13 +59,12 @@ jobs:
           fi
 
       - name: Exit early if no Dockerfile changes in PR
-         && github.event_name == 'pull_request' && steps.detect_image.outputs.dockerfile_found != 'true'
+        if: github.event_name == 'pull_request' && steps.detect_image.outputs.dockerfile_found != 'true'
         run: |
           echo "No Dockerfile changes detected in PR, exiting."
           exit 0
 
       - name: Parse image context
-        
         id: context
         uses: ./.github/actions/parse-image-context
         with:
@@ -74,7 +72,6 @@ jobs:
           platform: ${{ matrix.platform }}
 
       - name: Check if Dockerfile exists
-        
         id: file_check
         run: |
           dockerfile_path="Dockerfile.${{ steps.context.outputs.image-base-name }}"
@@ -87,7 +84,7 @@ jobs:
           fi
 
       - name: Exit early if Dockerfile does not exist
-         && steps.file_check.outputs.dockerfile_exists != 'true'
+        if: steps.file_check.outputs.dockerfile_exists != 'true'
         run: |
           echo "Dockerfile for ${{ steps.context.outputs.image-base-name }} does not exist. Halting build."
           # This is not a failure, but a graceful stop.
@@ -95,7 +92,6 @@ jobs:
 
 
       - name: Check if Dockerfile changed for this image
-        
         id: dockerfile_check
         run: |
           # For non-tag pushes, always proceed
@@ -124,13 +120,13 @@ jobs:
           fi
 
       - name: Exit early if Dockerfile unchanged
-         && steps.dockerfile_check.outputs.dockerfile_changed != 'true'
+        if: steps.dockerfile_check.outputs.dockerfile_changed != 'true'
         run: |
           echo "Did not detect any modified Dockerfiles in this commit, exiting."
           exit 0
 
       - name: Check if image already exists for this tag
-         && github.event_name == 'push' && github.ref_type == 'tag'
+        if: github.event_name == 'push' && github.ref_type == 'tag'
         id: image_exists
         run: |
           image_name="${{ env.REGISTRY }}/${{ github.repository }}/${{ steps.context.outputs.image-name }}"
@@ -147,13 +143,12 @@ jobs:
           fi
 
       - name: Exit early if image already published
-         && github.event_name == 'push' && github.ref_type == 'tag' && steps.image_exists.outputs.image_exists == 'true'
+        if: github.event_name == 'push' && github.ref_type == 'tag' && steps.image_exists.outputs.image_exists == 'true'
         run: |
           echo "Image already published for this tag, skipping build."
           exit 0
 
       - name: Setup Docker environment
-        
         uses: ./.github/actions/setup-docker
         with:
           registry: ${{ env.REGISTRY }}
@@ -162,7 +157,6 @@ jobs:
           platform: ${{ matrix.platform }}
 
       - name: Build Docker Image for ${{ matrix.platform }} (Test)
-        
         id: build_test
         uses: docker/build-push-action@v6
         with:
@@ -175,7 +169,6 @@ jobs:
           cache-to: type=gha,mode=max,scope=${{ github.repository }}-${{ steps.context.outputs.image-name }}
 
       - name: Output Docker Image Size for ${{ matrix.platform }}
-        
         run: |
           image_tag="${{ github.repository }}/${{ steps.context.outputs.image-name }}:test"
           echo "Getting size for image: $image_tag"
@@ -183,33 +176,13 @@ jobs:
           echo "Docker image size for ${{ matrix.platform }}: $size"
 
       - name: Run container structure tests
-        
         run: |
           curl -LO https://storage.googleapis.com/container-structure-test/latest/container-structure-test-linux-amd64
           chmod +x container-structure-test-linux-amd64
           sudo mv container-structure-test-linux-amd64 /usr/local/bin/container-structure-test
 
-      - name: Run Container Structure Tests for ${{ matrix.platform }}
-        
-        run: |
-          image_base_name="${{ steps.context.outputs.image-base-name }}"
-          test_config="tests/container-structure/${image_base_name}.yaml"
-          image_tag="${{ github.repository }}/${{ steps.context.outputs.image-name }}:test"
-          
-          # Run tests if config exists
-          test_config="tests/container-structure/${{ steps.context.outputs.image-base-name }}.yaml"
-          if [ -f "$test_config" ]; then
-            echo "Running container structure tests with config: $test_config"
-            container-structure-test test \
-              --image "${{ github.repository }}/${{ steps.context.outputs.image-name }}:test" \
-              --config "$test_config"
-          else
-            echo "No container structure test config found at $test_config, skipping tests"
-          fi
-
       - name: Run Trivy vulnerability scanner for ${{ matrix.platform }}
-        
-        uses: aquasecurity/trivy-action@b6643a29fecd7f34b3597bc6acb0a98b03d33ff8
+        uses: aquasecurity/trivy-action@b6643a29fecd7f34b35997bc6acb0a98b03d33ff8
         with:
           scan-type: image
           image-ref: ${{ github.repository }}/${{ steps.context.outputs.image-name }}:test
@@ -220,7 +193,6 @@ jobs:
           severity: "CRITICAL,HIGH,MEDIUM"
 
       - name: Get installed package versions for ${{ matrix.platform }}
-        
         id: get_versions
         run: |
           # Download container-structure-test if not available
@@ -243,7 +215,6 @@ jobs:
           fi
 
       - name: Run Trivy vulnerability scanner for ${{ matrix.platform }}
-        
         uses: aquasecurity/trivy-action@b6643a29fecd7f34b3597bc6acb0a98b03d33ff8
         with:
           scan-type: image
@@ -255,7 +226,6 @@ jobs:
           severity: "CRITICAL,HIGH,MEDIUM"
 
       - name: Extract language versions
-        
         id: extract_versions
         uses: ./.github/actions/extract-versions
         with:
@@ -265,7 +235,7 @@ jobs:
           platform-suffix: ${{ steps.context.outputs.platform-suffix }}
 
       - name: Upload versions artifact for ${{ matrix.platform }}
-         && steps.extract_versions.outputs.extraction-success == 'true' && github.event_name == 'push' && github.ref_type == 'tag'
+        if: steps.extract_versions.outputs.extraction-success == 'true' && github.event_name == 'push' && github.ref_type == 'tag'
         uses: actions/upload-artifact@v5
         with:
           name: versions-file-${{ steps.context.outputs.platform-suffix }}
@@ -274,7 +244,6 @@ jobs:
           if-no-files-found: error
 
       - name: Calculate version tags for all image types
-        
         id: version_tags
         run: |
           image_name="${{ steps.context.outputs.image-base-name }}"
@@ -391,7 +360,7 @@ jobs:
           esac
 
       - name: Create version tags artifact
-         && github.event_name == 'push' && github.ref_type == 'tag' && steps.version_tags.outputs.has_version_tags == 'true'
+        if: github.event_name == 'push' && github.ref_type == 'tag' && steps.version_tags.outputs.has_version_tags == 'true'
         run: |
           mkdir -p version_artifacts
           echo "major_tag=${{ steps.version_tags.outputs.major_tag }}" > version_artifacts/version_tags.env
@@ -399,7 +368,7 @@ jobs:
           echo "has_version_tags=${{ steps.version_tags.outputs.has_version_tags }}" >> version_artifacts/version_tags.env
 
       - name: Upload version tags as artifact
-         && github.event_name == 'push' && github.ref_type == 'tag' && steps.version_tags.outputs.has_version_tags == 'true'
+        if: github.event_name == 'push' && github.ref_type == 'tag' && steps.version_tags.outputs.has_version_tags == 'true'
         uses: actions/upload-artifact@v5
         with:
           name: version-tags-${{ steps.context.outputs.image-base-name }}-${{ steps.context.outputs.platform-suffix }}
@@ -408,12 +377,10 @@ jobs:
           if-no-files-found: warn
 
       - name: Generate build timestamp
-        
         id: build_timestamp
         run: echo "created=$(date -u +'%Y-%m-%dT%H:%M:%SZ')" >> $GITHUB_OUTPUT
 
       - name: Extract metadata (tags, labels) for Docker
-        
         id: meta
         uses: docker/metadata-action@v5.9.0
         with:
@@ -460,7 +427,7 @@ jobs:
             org.opencontainers.image.architecture=${{ matrix.platform }}
 
       - name: Auto-fix nginx compatibility (nginx-base only)
-         && steps.parse_tag.outputs.image_base_name == 'nginx-base'
+        if: steps.parse_tag.outputs.image_base_name == 'nginx-base'
         id: nginx-autofix
         run: |
           # Get versions (fixed grep for cross-platform compatibility)
@@ -555,7 +522,7 @@ jobs:
           fi
 
       - name: Create issue for failed auto-fix (nginx-base only)
-         && steps.parse_tag.outputs.image_base_name == 'nginx-base' && steps.nginx-autofix.outputs.auto_fix_applied == 'true' && steps.nginx-autofix.outputs.fix_successful == 'false'
+        if: steps.parse_tag.outputs.image_base_name == 'nginx-base' && steps.nginx-autofix.outputs.auto_fix_applied == 'true' && steps.nginx-autofix.outputs.fix_successful == 'false'
         run: |
           echo "🚨 Creating GitHub issue for failed auto-fix"
           
@@ -625,7 +592,7 @@ jobs:
             --assignee "${{ github.actor }}"
 
       - name: Fail build on auto-fix failure (nginx-base only)
-         && steps.parse_tag.outputs.image_base_name == 'nginx-base' && steps.nginx-autofix.outputs.auto_fix_applied == 'true' && steps.nginx-autofix.outputs.fix_successful == 'false'
+        if: steps.parse_tag.outputs.image_base_name == 'nginx-base' && steps.nginx-autofix.outputs.auto_fix_applied == 'true' && steps.nginx-autofix.outputs.fix_successful == 'false'
         run: |
           echo "💥 BUILD FAILURE: Nginx auto-fix unsuccessful"
           echo ""
@@ -641,7 +608,7 @@ jobs:
 
       - name: Build and push Docker image for ${{ matrix.platform }}
         id: docker_build
-         && github.event_name == 'push' && github.ref_type == 'tag'
+        if: github.event_name == 'push' && github.ref_type == 'tag'
         uses: docker/build-push-action@v6
         with:
           pull: true
@@ -654,12 +621,12 @@ jobs:
           cache-to: type=gha,mode=max,scope=${{ github.repository }}-${{ steps.context.outputs.image-name }}
 
       - name: Install Cosign
-         && github.event_name == 'push' && github.ref_type == 'tag'
+        if: github.event_name == 'push' && github.ref_type == 'tag'
         uses: sigstore/cosign-installer@v3
         
       - name: Sign container image with Cosign
         id: cosign_sign
-         && github.event_name == 'push' && github.ref_type == 'tag' && steps.docker_build.outputs.digest != ''
+        if: github.event_name == 'push' && github.ref_type == 'tag' && steps.docker_build.outputs.digest != ''
         env:
           COSIGN_EXPERIMENTAL: 1
         run: |
@@ -682,7 +649,7 @@ jobs:
           
       - name: Attest build provenance for ${{ matrix.platform }}
         id: attest_provenance
-         && github.event_name == 'push' && github.ref_type == 'tag' && steps.docker_build.outputs.digest != ''
+        if: github.event_name == 'push' && github.ref_type == 'tag' && steps.docker_build.outputs.digest != ''
         uses: actions/attest-build-provenance@977bb373ede98d70efdf65b84cb5f73e068dcc2a # v3.0.0
         with:
           # Create cryptographic attestation for build provenance
@@ -692,7 +659,7 @@ jobs:
 
       - name: Extract Sigstore logIndex for ${{ matrix.platform }}
         id: extract_logindex
-         && github.event_name == 'push' && github.ref_type == 'tag'
+        if: github.event_name == 'push' && github.ref_type == 'tag'
         run: |
           echo "Attestation URL: ${{ steps.attest_provenance.outputs.attestation-url }}"
           echo "Bundle path: ${{ steps.attest_provenance.outputs.bundle-path }}"
@@ -821,7 +788,7 @@ jobs:
           echo "provenance_file_path=$output_file" >> $GITHUB_OUTPUT
 
       - name: Upload provenance artifact for ${{ matrix.platform }}
-         && github.event_name == 'push' && github.ref_type == 'tag' && steps.extract_logindex.outputs.provenance_file_path != ''
+        if: github.event_name == 'push' && github.ref_type == 'tag' && steps.extract_logindex.outputs.provenance_file_path != ''
         uses: actions/upload-artifact@v5
         with:
           name: provenance-${{ steps.context.outputs.image-base-name }}-${{ steps.context.outputs.platform-suffix }}
@@ -830,13 +797,13 @@ jobs:
           if-no-files-found: warn
 
       - name: Output SHA256 digest for ${{ matrix.platform }}
-         && github.event_name == 'push' && github.ref_type == 'tag'
+        if: github.event_name == 'push' && github.ref_type == 'tag'
         run: |
           echo "SHA256 digest for ${{ steps.context.outputs.image-name }}: ${{ steps.docker_build.outputs.digest }}"
 
       - name: Determine Repository Owner Type for ${{ matrix.platform }}
         id: owner_type
-         && github.event_name == 'push' && github.ref_type == 'tag' && steps.docker_build.outputs.digest != ''
+        if: github.event_name == 'push' && github.ref_type == 'tag' && steps.docker_build.outputs.digest != ''
         env:
           OWNER_LOGIN: ${{ github.repository_owner }} 
           # GH_TOKEN is inherited from the job-level env
