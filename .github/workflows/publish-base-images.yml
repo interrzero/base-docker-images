@@ -16,10 +16,12 @@ env:
   TAG: ${{ github.ref }}
 
 jobs:
+  # The top-level `if` condition for the entire job.
+  # This ensures the job runs only if the image-base-name is not '__UNDEFINED__',
+  # which signifies a deprecated or unknown image detected by parse-image-context.
   publish_image:
-    if: "!contains(github.ref, 'python-base') && !contains(github.ref, 'nodejs-base') && !contains(github.ref, 'go-base')"
     runs-on: ubuntu-latest
-    env:  # Add GH_TOKEN at the job level
+    env: # Add GH_TOKEN at the job level
       GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
     strategy:
       fail-fast: false
@@ -36,7 +38,7 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v5
         with:
-          fetch-depth: 0  # Need full history for git diff comparisons
+          fetch-depth: 0 # Need full history for git diff comparisons
 
       - name: Detect image for PR builds
         id: detect_image
@@ -71,6 +73,23 @@ jobs:
           tag: ${{ env.TAG }}
           platform: ${{ matrix.platform }}
 
+      # Add a job-level if condition check for image-base-name after context parsing
+      - name: Check for deprecated image after parsing
+        id: image_deprecation_check
+        run: |
+           if [ "${{ steps.context.outputs.image-base-name }}" == "__UNDEFINED__" ]; then
+             echo "Deprecated or invalid image detected for tag ${{ env.TAG }}. Skipping build."
+             echo "is_deprecated=true" >> $GITHUB_OUTPUT
+           else
+             echo "is_deprecated=false" >> $GITHUB_OUTPUT
+           fi
+      
+      - name: Exit early if deprecated image detected
+        if: steps.image_deprecation_check.outputs.is_deprecated == 'true'
+        run: |
+          echo "Build skipped for deprecated or invalid image. Exiting."
+          exit 0
+
       - name: Check if Dockerfile exists
         id: file_check
         run: |
@@ -90,7 +109,6 @@ jobs:
           # This is not a failure, but a graceful stop.
           exit 0
 
-
       - name: Check if Dockerfile changed for this image
         id: dockerfile_check
         run: |
@@ -107,7 +125,7 @@ jobs:
           prev_tag=$(git tag -l "release/${{ steps.context.outputs.image-base-name }}/v*" --sort=-version:refname | head -n 2 | tail -n 1)
           if [ -n "$prev_tag" ]; then
             echo "Comparing with previous tag: $prev_tag"
-            if git diff --name-only "$prev_tag" HEAD | grep -q "^${dockerfile_path}$"; then
+            if git diff --name-only "$prev_tag" HEAD | grep -q "^${dockerfile_path}$\""; then
               echo "dockerfile_changed=true" >> $GITHUB_OUTPUT
               echo "Dockerfile $dockerfile_path was modified since $prev_tag"
             else
@@ -181,8 +199,24 @@ jobs:
           chmod +x container-structure-test-linux-amd64
           sudo mv container-structure-test-linux-amd64 /usr/local/bin/container-structure-test
 
+      - name: Run Container Structure Tests for ${{ matrix.platform }}
+        run: |
+          image_base_name="${{ steps.context.outputs.image-base-name }}"
+          test_config="tests/container-structure/${image_base_name}.yaml"
+          image_tag="${{ github.repository }}/${{ steps.context.outputs.image-name }}:test"
+          
+          # Run tests if config exists
+          if [ -f "$test_config" ]; then
+            echo "Running container structure tests with config: $test_config"
+            container-structure-test test \
+              --image "${{ github.repository }}/${{ steps.context.outputs.image-name }}:test" \
+              --config "$test_config"
+          else
+            echo "No container structure test config found at $test_config, skipping tests"
+          fi
+
       - name: Run Trivy vulnerability scanner for ${{ matrix.platform }}
-        uses: aquasecurity/trivy-action@b6643a29fecd7f34b35997bc6acb0a98b03d33ff8
+        uses: aquasecurity/trivy-action@b6643a29fecd7f34b3597bc6acb0a98b03d33ff8
         with:
           scan-type: image
           image-ref: ${{ github.repository }}/${{ steps.context.outputs.image-name }}:test
@@ -273,19 +307,19 @@ jobs:
                   "python-*-base")
                     MAJOR_TAG=$(grep "python_major_tag=" versions.txt | cut -d'=' -f2)
                     MINOR_TAG=$(grep "python_minor_tag=" versions.txt | cut -d'=' -f2)
-                    ;;
+                    ;;;
                   "nodejs-*-base")
                     MAJOR_TAG=$(grep "nodejs_major_tag=" versions.txt | cut -d'=' -f2)
                     MINOR_TAG=$(grep "nodejs_minor_tag=" versions.txt | cut -d'=' -f2)
-                    ;;
+                    ;;;
                   "openjdk-*-base")
                     MAJOR_TAG=$(grep "java_major_tag=" versions.txt | cut -d'=' -f2)
                     MINOR_TAG=$(grep "java_minor_tag=" versions.txt | cut -d'=' -f2)
-                    ;;
+                    ;;;
                   "go-*-base")
                     MAJOR_TAG=$(grep "go_major_tag=" versions.txt | cut -d'=' -f2)
                     MINOR_TAG=$(grep "go_minor_tag=" versions.txt | cut -d'=' -f2)
-                    ;;
+                    ;;;
                 esac
                 
                 if [ -n "$MAJOR_TAG" ] && [ -n "$MINOR_TAG" ]; then
@@ -298,7 +332,7 @@ jobs:
               else
                 echo "⚠️  Failed to extract versions.txt from container"
               fi
-              ;;
+              ;;;
               
             # Specialized tool images - extract tool versions directly
             "fips-base")
@@ -324,7 +358,7 @@ jobs:
               else
                 echo "⚠️  Failed to extract OpenSSL version"
               fi
-              ;;
+              ;;;
               
             "nginx-base")
               echo "Nginx image detected, extracting Nginx version..."
@@ -333,7 +367,7 @@ jobs:
               if NGINX_VERSION=$(docker run --rm --platform ${{ matrix.platform }} \
                  --entrypoint="/usr/sbin/nginx" \
                  "${{ github.repository }}/${{ steps.context.outputs.image-name }}:test" \
-                 -v 2>&1 | grep -o '[0-9]\+\.[0-9]\+\.[0-9]\+' | head -1); then
+                 -v 2>&1 | grep -o '[0-9]\+\.[0-9]\+\.[0-9]\+\' | head -1); then
                 
                 echo "Nginx version: $NGINX_VERSION"
                 
@@ -351,16 +385,16 @@ jobs:
               else
                 echo "⚠️  Failed to extract Nginx version"
               fi
-              ;;
+              ;;;
               
             # Base images - no version tags needed
             *)
               echo "Base image ($image_name) - no version tags needed"
-              ;;
+              ;;;
           esac
 
       - name: Create version tags artifact
-        if: github.event_name == 'push' && github.ref_type == 'tag' && steps.version_tags.outputs.has_version_tags == 'true'
+        if: steps.version_tags.outputs.has_version_tags == 'true' && github.event_name == 'push' && github.ref_type == 'tag'
         run: |
           mkdir -p version_artifacts
           echo "major_tag=${{ steps.version_tags.outputs.major_tag }}" > version_artifacts/version_tags.env
@@ -368,7 +402,7 @@ jobs:
           echo "has_version_tags=${{ steps.version_tags.outputs.has_version_tags }}" >> version_artifacts/version_tags.env
 
       - name: Upload version tags as artifact
-        if: github.event_name == 'push' && github.ref_type == 'tag' && steps.version_tags.outputs.has_version_tags == 'true'
+        if: steps.version_tags.outputs.has_version_tags == 'true' && github.event_name == 'push' && github.ref_type == 'tag'
         uses: actions/upload-artifact@v5
         with:
           name: version-tags-${{ steps.context.outputs.image-base-name }}-${{ steps.context.outputs.platform-suffix }}
@@ -427,7 +461,7 @@ jobs:
             org.opencontainers.image.architecture=${{ matrix.platform }}
 
       - name: Auto-fix nginx compatibility (nginx-base only)
-        if: steps.parse_tag.outputs.image_base_name == 'nginx-base'
+        if: steps.context.outputs.image-base-name == 'nginx-base'
         id: nginx-autofix
         run: |
           # Get versions (fixed grep for cross-platform compatibility)
@@ -522,7 +556,7 @@ jobs:
           fi
 
       - name: Create issue for failed auto-fix (nginx-base only)
-        if: steps.parse_tag.outputs.image_base_name == 'nginx-base' && steps.nginx-autofix.outputs.auto_fix_applied == 'true' && steps.nginx-autofix.outputs.fix_successful == 'false'
+        if: steps.context.outputs.image-base-name == 'nginx-base' && steps.nginx-autofix.outputs.auto_fix_applied == 'true' && steps.nginx-autofix.outputs.fix_successful == 'false'
         run: |
           echo "🚨 Creating GitHub issue for failed auto-fix"
           
@@ -538,10 +572,10 @@ jobs:
             MODULE_ERRORS=$(cat module-error.log)
           fi
           
-          # Create detailed issue
-          gh issue create \
-            --title "🚨 Nginx auto-fix failed: nginx ${{ steps.nginx-autofix.outputs.chainguard_version }} + headers-more v${{ steps.nginx-autofix.outputs.attempted_headers }}" \
-            --body "## Auto-fix Failure Summary
+          # Use a temporary file to construct the body to avoid complex shell escaping issues with multi-line strings
+          ISSUE_BODY_FILE="$(mktemp)"
+          cat > "$ISSUE_BODY_FILE" << EOF
+          ## Auto-fix Failure Summary
 
           **The automated nginx compatibility fix has failed and requires manual intervention.**
 
@@ -552,27 +586,27 @@ jobs:
           - **Attempted headers-more**: v${{ steps.nginx-autofix.outputs.attempted_headers }}
 
           ### What Failed
-          The automatic +0.01 version bump strategy failed during the nginx-base build process (tested with \`--pull\` flag).
+          The automatic +0.01 version bump strategy failed during the nginx-base build process (tested with --pull flag).
 
           ### Build Errors
-          \`\`\`
+          ```
           $BUILD_ERRORS
-          \`\`\`
+          ```
 
-          ### Module Loading Errors  
-          \`\`\`
+          ### Module Loading Errors
+          ```
           $MODULE_ERRORS
-          \`\`\`
+          ```
 
           ### Manual Action Required
           1. **Check compatibility matrix**: Visit [headers-more compatibility docs](https://github.com/openresty/headers-more-nginx-module#compatibility)
           2. **Research available versions**: Check [available tags](https://github.com/openresty/headers-more-nginx-module/tags)
           3. **Test manually with --pull**: 
-             \`\`\`bash
+             ```bash
              docker build --pull -t test-nginx -f Dockerfile.nginx-base .
-             docker run --rm --entrypoint=\"\" test-nginx nginx -t
-             \`\`\`
-          4. **Update Dockerfile**: Modify \`Dockerfile.nginx-base\` with working combination
+             docker run --rm --entrypoint="" test-nginx nginx -t
+             ```
+          4. **Update Dockerfile**: Modify Dockerfile.nginx-base with working combination
           5. **Consider alternatives**: If no compatible version exists, research alternative nginx modules
 
           ### Workflow Information
@@ -580,19 +614,25 @@ jobs:
           - **Run ID**: ${{ github.run_id }}
           - **Commit**: ${{ github.sha }}
           - **Triggered by**: ${{ github.event_name }}
-
           ### Next Steps
           - [ ] Research compatible headers-more version for nginx ${{ steps.nginx-autofix.outputs.chainguard_version }}
-          - [ ] Test proposed combination locally with \`--pull\` flag
+          - [ ] Test proposed combination locally with --pull flag
           - [ ] Update Dockerfile.nginx-base with working versions
           - [ ] Consider improving auto-fix strategy if this becomes frequent
 
-          **This issue was automatically created by the nginx compatibility workflow.**" \
+          **This issue was automatically created by the nginx compatibility workflow.**
+          EOF
+          
+          gh issue create \
+            --title "🚨 Nginx auto-fix failed: nginx ${{ steps.nginx-autofix.outputs.chainguard_version }} + headers-more v${{ steps.nginx-autofix.outputs.attempted_headers }}" \
+            --body-file "$ISSUE_BODY_FILE" \
             --label "bug,nginx,auto-fix-failed,needs-manual-intervention" \
             --assignee "${{ github.actor }}"
+          
+          rm -f "$ISSUE_BODY_FILE" # Clean up temporary file
 
       - name: Fail build on auto-fix failure (nginx-base only)
-        if: steps.parse_tag.outputs.image_base_name == 'nginx-base' && steps.nginx-autofix.outputs.auto_fix_applied == 'true' && steps.nginx-autofix.outputs.fix_successful == 'false'
+        if: steps.context.outputs.image-base-name == 'nginx-base' && steps.nginx-autofix.outputs.auto_fix_applied == 'true' && steps.nginx-autofix.outputs.fix_successful == 'false'
         run: |
           echo "💥 BUILD FAILURE: Nginx auto-fix unsuccessful"
           echo ""
@@ -626,7 +666,7 @@ jobs:
         
       - name: Sign container image with Cosign
         id: cosign_sign
-        if: github.event_name == 'push' && github.ref_type == 'tag' && steps.docker_build.outputs.digest != ''
+        if: "github.event_name == 'push' && github.ref_type == 'tag' && steps.docker_build.outputs.digest != ''"
         env:
           COSIGN_EXPERIMENTAL: 1
         run: |
@@ -649,7 +689,7 @@ jobs:
           
       - name: Attest build provenance for ${{ matrix.platform }}
         id: attest_provenance
-        if: github.event_name == 'push' && github.ref_type == 'tag' && steps.docker_build.outputs.digest != ''
+        if: "github.event_name == 'push' && github.ref_type == 'tag' && steps.docker_build.outputs.digest != ''"
         uses: actions/attest-build-provenance@977bb373ede98d70efdf65b84cb5f73e068dcc2a # v3.0.0
         with:
           # Create cryptographic attestation for build provenance
@@ -803,7 +843,7 @@ jobs:
 
       - name: Determine Repository Owner Type for ${{ matrix.platform }}
         id: owner_type
-        if: github.event_name == 'push' && github.ref_type == 'tag' && steps.docker_build.outputs.digest != ''
+        if: "github.event_name == 'push' && github.ref_type == 'tag' && steps.docker_build.outputs.digest != ''"
         env:
           OWNER_LOGIN: ${{ github.repository_owner }} 
           # GH_TOKEN is inherited from the job-level env
@@ -828,11 +868,11 @@ jobs:
             exit 1
           fi
 
-
   create_release:
     runs-on: ubuntu-latest
     needs: publish_image
-    if: github.event_name == 'push' && github.ref_type == 'tag' && needs.publish_image.result == 'success'
+    # This ensures the step runs only if the image-base-name is not '__UNDEFINED__'.
+    if: "github.event_name == 'push' && github.ref_type == 'tag' && needs.publish_image.result == 'success' && needs.publish_image.outputs.image_deprecation_check_is_deprecated != 'true'"
     permissions:
       contents: write
       actions: read
@@ -926,34 +966,34 @@ jobs:
               echo "ARM64 provenance artifact not downloaded or download failed."
           fi
 
-          # Build Release Body
-          intro_text="Platform-specific Docker images for \`$image_base_name\` version \`$version_tag\` pushed.
+          # Use a temporary file to construct the body
+          RELEASE_BODY_FILE="$(mktemp)"
+          
+          cat > "$RELEASE_BODY_FILE" << EOF
+          Platform-specific Docker images for \`$image_base_name\` version \`$version_tag\` pushed.
 
           **We strongly recommend using the \`:latest\` tag for all images.** This ensures you always have the most recent security patches and updates.
-          To ensure your CI/CD pipeline always uses the latest version of the image, you should use the \`--pull\` flag in your \`docker build\` command."
-
-          body=$(cat <<EOF
-          $intro_text
+          To ensure your CI/CD pipeline always uses the latest version of the image, you should use the \`--pull\` flag in your \`docker build\` command.
 
           **Published Images & Tags:**
 
-          *   **linux/amd64:**
-              *   Image: \`$registry/$repo_name/$image_base_name-linux-amd64\`
-              *   Tag: \`$version_tag\`
-              *   Tag: \`latest\`
-          *   **linux/arm64:**
-              *   Image: \`$registry/$repo_name/$image_base_name-linux-arm64\`
-              *   Tag: \`$version_tag\`
-              *   Tag: \`latest\`
+          \*   **linux/amd64:**
+              \*   Image: \`${registry}/${repo_name}/${image_base_name}-linux-amd64\`
+              \*   Tag: \`${version_tag}\`
+              \*   Tag: \`latest\`
+          \*   **linux/arm64:**
+              \*   Image: \`${registry}/${repo_name}/${image_base_name}-linux-arm64\`
+              \*   Tag: \`${version_tag}\`
+              \*   Tag: \`latest\`
 
           **Dockerfile Example:**
           \`\`\`dockerfile
-          FROM $registry/$repo_name/${image_base_name}:latest
+          FROM ${registry}/${repo_name}/${image_base_name}:latest
           \`\`\`
 
           **Pull Example:**
           \`\`\`bash
-          docker pull $registry/$repo_name/${image_base_name}:latest
+          docker pull ${registry}/${repo_name}/${image_base_name}:latest
           \`\`\`
 
           **Build command:**
@@ -962,39 +1002,57 @@ jobs:
           \`\`\`
 
           **🔐 Build Provenance & Supply Chain Security:**
-          EOF
-          )
 
           if [ -n "$sigstore_amd64" ] || [ -n "$sigstore_arm64" ]; then
-            body+=$'\n\n**Sigstore Transparency Log:**'
+            echo "" >> "$RELEASE_BODY_FILE"
+            echo "**Sigstore Transparency Log:**" >> "$RELEASE_BODY_FILE"
             if [ -n "$sigstore_amd64" ]; then
-              body+=$(printf '\n* **AMD64**: [%s](%s)' "View in Sigstore" "$sigstore_amd64")
+              printf "* **AMD64**: [%s](%s)\n" "View in Sigstore" "$sigstore_amd64" >> "$RELEASE_BODY_FILE"
             fi
             if [ -n "$sigstore_arm64" ]; then
-              body+=$(printf '\n* **ARM64**: [%s](%s)' "View in Sigstore" "$sigstore_arm64")
+              printf "* **ARM64**: [%s](%s)\n" "View in Sigstore" "$sigstore_arm64" >> "$RELEASE_BODY_FILE"
             fi
           fi
           
           if [ -n "$github_attestation_amd64" ] || [ -n "$github_attestation_arm64" ]; then
-            body+=$'\n\n**GitHub Attestations:**'
+            echo "" >> "$RELEASE_BODY_FILE"
+            echo "**GitHub Attestations:**" >> "$RELEASE_BODY_FILE"
             if [ -n "$github_attestation_amd64" ]; then
-              body+=$(printf '\n* **AMD64**: [%s](%s)' "View Attestation" "$github_attestation_amd64")
+              printf "* **AMD64**: [%s](%s)\n" "View Attestation" "$github_attestation_amd64" >> "$RELEASE_BODY_FILE"
             fi
             if [ -n "$github_attestation_arm64" ]; then
-              body+=$(printf '\n* **ARM64**: [%s](%s)' "View Attestation" "$github_attestation_arm64")
+              printf "* **ARM64**: [%s](%s)\n" "View Attestation" "$github_attestation_arm64" >> "$RELEASE_BODY_FILE"
             fi
           fi
           
-          body+=$'\n\n**🔐 Public Verification (No authentication required):**'
-          body+=$'\n\`\`\`bash'
-          body+=$'\n# Install cosign: https://docs.sigstore.dev/cosign/installation'
-          body+=$(printf '\ncosign verify \\\n  --certificate-identity-regexp "https://github.com/%s/.github/workflows/.*" \\\n  --certificate-oidc-issuer "https://token.actions.githubusercontent.com" \\\n  %s/%s/%s:latest | jq' "$repo_name" "$registry" "$repo_name" "$image_base_name")
-          body+=$'\n\`\`\`'
+          echo "" >> "$RELEASE_BODY_FILE"
+          cat >> "$RELEASE_BODY_FILE" << EOF
+          **🔐 Public Verification (No authentication required):**
+          ```bash
+          # Install cosign: https://docs.sigstore.dev/cosign/installation
+          cosign verify \
+            --certificate-identity-regexp "https://github.com/%s/.github/workflows/.*" \
+            --certificate-oidc-issuer "https://token.actions.githubusercontent.com" \
+            %s/%s/%s:latest | jq
+          ```
+          EOF
 
+          # Replace the printf placeholder with actual values. This requires reading the file back.
+          # The values needs to be escaped for sed.
+          ESCAPED_REPO_NAME=$(printf '%s' "$repo_name" | sed -e 's/[\/&]/\\&/g')
+          ESCAPED_REGISTRY=$(printf '%s' "$registry" | sed -e 's/[\/&]/\\&/g')
+          ESCAPED_IMAGE_BASE_NAME=$(printf '%s' "$image_base_name" | sed -e 's/[\/&]/\\&/g')
+
+          sed -i "s|%s/.github/workflows/.*|$ESCAPED_REPO_NAME/.github/workflows/.*|g" "$RELEASE_BODY_FILE"
+          sed -i "s|%s/%s/%s:latest|$ESCAPED_REGISTRY/$ESCAPED_REPO_NAME/$ESCAPED_IMAGE_BASE_NAME:latest|g" "$RELEASE_BODY_FILE"
+
+          body_content=$(<"$RELEASE_BODY_FILE")
           echo "Setting BODY_TEXT environment variable..."
           echo "BODY_TEXT<<EOF" >> $GITHUB_ENV
-          echo "$body" >> $GITHUB_ENV
+          echo "$body_content" >> $GITHUB_ENV
           echo "EOF" >> $GITHUB_ENV
+
+          rm -f "$RELEASE_BODY_FILE" # Clean up temporary file
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
@@ -1010,7 +1068,8 @@ jobs:
   create_multiarch_manifests:
     needs: [publish_image, create_release]
     runs-on: ubuntu-latest
-    if: github.event_name == 'push' && github.ref_type == 'tag' && needs.publish_image.result == 'success' && needs.create_release.result == 'success'
+    # This ensures the step runs only if the image-base-name is not '__UNDEFINED__'.
+    if: "github.event_name == 'push' && github.ref_type == 'tag' && needs.publish_image.result == 'success' && needs.create_release.result == 'success' && needs.publish_image.outputs.image_deprecation_check_is_deprecated != 'true'"
     permissions:
       contents: read
       packages: write
@@ -1044,13 +1103,14 @@ jobs:
         id: version_info
         run: |
           # Download version artifacts if they exist
-          image_name="${{ steps.parse_tag.outputs.image_base_name }}"
+          image_name="${{ steps.parse_tag.outputs.image-base-name }}"
           
           # Try to download version artifacts from both platforms
           mkdir -p version_artifacts
           
           # Check if artifacts exist and download them
-          for platform in linux-amd64 linux-arm64; do
+          for platform in linux-amd64 linux-arm64;
+          do
             artifact_name="version-tags-$image_name-$platform"
             echo "Checking for artifact: $artifact_name"
             
@@ -1078,7 +1138,7 @@ jobs:
 
       - name: Create multi-arch manifests
         run: |
-          image_base_name="${{ steps.parse_tag.outputs.image_base_name }}"
+          image_base_name="${{ steps.parse_tag.outputs.image-base-name }}"
           version="${{ steps.parse_tag.outputs.version }}"
           registry="${{ env.REGISTRY }}/${{ github.repository }}"
           
@@ -1173,7 +1233,7 @@ jobs:
 
       - name: Verify multi-arch manifests
         run: |
-          image_base_name="${{ steps.parse_tag.outputs.image_base_name }}"
+          image_base_name="${{ steps.parse_tag.outputs.image-base-name }}"
           version="${{ steps.parse_tag.outputs.version }}"
           registry="${{ env.REGISTRY }}/${{ github.repository }}"
           universal_image="$registry/$image_base_name"
@@ -1198,4 +1258,3 @@ jobs:
               fi
             done
           fi
-
