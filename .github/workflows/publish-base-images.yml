@@ -12,40 +12,28 @@ on:
 
 env:
   REGISTRY: ghcr.io
-  # For tag pushes, use the actual ref. For PRs, detect from modified Dockerfiles
   TAG: ${{ github.ref }}
 
 jobs:
-  # The top-level `if` condition for the entire job.
-  # This ensures the job runs only if the image-base-name is not '__UNDEFINED__',
-  # which signifies a deprecated or unknown image detected by parse-image-context.
-  publish_image:
+  generate-matrix:
     runs-on: ubuntu-latest
-    env: # Add GH_TOKEN at the job level
-      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-    strategy:
-      fail-fast: false
-      matrix:
-        platform: [linux/amd64, linux/arm64]
-    permissions:
-      contents: write
-      packages: write
-      security-events: write
-      actions: read
-      attestations: write
-      id-token: write
+    outputs:
+      matrix: ${{ steps.set-matrix.outputs.matrix }}
+      image-base-name: ${{ steps.context.outputs.image-base-name }}
+      is_deprecated: ${{ steps.image_deprecation_check.outputs.is_deprecated }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@v6
         with:
-          fetch-depth: 0 # Need full history for git diff comparisons
+          fetch-depth: 0 # Needed for git diff in PRs
 
       - name: Detect image for PR builds
         id: detect_image
+        if: github.event_name == 'pull_request'
         run: |
-          modified_dockerfile=$(git diff --name-only ${{ github.event.pull_request.base.sha }} ${{ github.sha }} | grep "^Dockerfile\." | head -n 1)
+          modified_dockerfile=$(git diff --name-only ${{ github.event.pull_request.base.sha }} ${{ github.sha }} | grep "^Dockerfile\\." | head -n 1)
           if [ -n "$modified_dockerfile" ]; then
-            detected_image=$(echo "$modified_dockerfile" | sed 's/^Dockerfile\.//')
+            detected_image=$(echo "$modified_dockerfile" | sed 's/^Dockerfile\\.//')
             if [[ "$detected_image" == "go-base" || "$detected_image" == "nodejs-base" || "$detected_image" == "python-base" ]]; then
               echo "PR modifies a deprecated image ($detected_image). Halting build for this image."
               echo "dockerfile_found=false" >> $GITHUB_OUTPUT
@@ -60,10 +48,71 @@ jobs:
             echo "No Dockerfile changes detected in PR, will exit early"
           fi
 
-      - name: Exit early if no Dockerfile changes in PR
-        if: github.event_name == 'pull_request' && steps.detect_image.outputs.dockerfile_found != 'true'
+      - name: Set TAG for context parsing
+        if: github.event_name == 'push' || (github.event_name == 'pull_request' && steps.detect_image.outputs.dockerfile_found == 'true')
         run: |
-          echo "No Dockerfile changes detected in PR, exiting."
+          if [ "${{ github.event_name }}" == "push" ]; then
+            echo "TAG=${{ github.ref }}" >> $GITHUB_ENV
+          else
+            # TAG is already set in detect_image step for PRs
+            echo "Using TAG from detect_image for PR: ${{ env.TAG }}"
+          fi
+
+      - name: Parse image context
+        id: context
+        if: github.event_name == 'push' || (github.event_name == 'pull_request' && steps.detect_image.outputs.dockerfile_found == 'true')
+        uses: ./.github/actions/parse-image-context
+        with:
+          tag: ${{ env.TAG }}
+          platform: "linux/amd64" # Platform doesn't matter for this step
+
+      - name: Check for deprecated image after parsing
+        id: image_deprecation_check
+        if: github.event_name == 'push' || (github.event_name == 'pull_request' && steps.detect_image.outputs.dockerfile_found == 'true')
+        run: |
+           if [ "${{ steps.context.outputs.image-base-name }}" == "__UNDEFINED__" ]; then
+             echo "Deprecated or invalid image detected for tag ${{ env.TAG }}. Skipping build."
+             echo "is_deprecated=true" >> $GITHUB_OUTPUT
+           else
+             echo "is_deprecated=false" >> $GITHUB_OUTPUT
+           fi
+
+      - name: Set matrix output
+        id: set-matrix
+        run: |
+          if [ "${{ steps.image_deprecation_check.outputs.is_deprecated }}" == "true" ] || ([ "${{ github.event_name }}" == "pull_request" ] && [ "${{ steps.detect_image.outputs.dockerfile_found }}" != "true" ]); then
+            echo "matrix={\"include\":[{\"platform\":\"__NONE__\"}]}" >> $GITHUB_OUTPUT
+          else
+            echo "matrix={\"include\":[{\"platform\":\"linux/amd64\"},{\"platform\":\"linux/arm64\"}]}" >> $GITHUB_OUTPUT
+          fi
+
+  publish_image:
+    needs: generate-matrix
+    if: needs.generate-matrix.outputs.is_deprecated != 'true'
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      TAG: ${{ env.TAG }}
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJson(needs.generate-matrix.outputs.matrix) }}
+    permissions:
+      contents: write
+      packages: write
+      security-events: write
+      actions: read
+      attestations: write
+      id-token: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Skip job for dummy platform
+        if: matrix.platform == '__NONE__'
+        run: |
+          echo "Skipping build for dummy platform '__NONE__'."
           exit 0
 
       - name: Parse image context
@@ -73,27 +122,10 @@ jobs:
           tag: ${{ env.TAG }}
           platform: ${{ matrix.platform }}
 
-      # Add a job-level if condition check for image-base-name after context parsing
-      - name: Check for deprecated image after parsing
-        id: image_deprecation_check
-        run: |
-           if [ "${{ steps.context.outputs.image-base-name }}" == "__UNDEFINED__" ]; then
-             echo "Deprecated or invalid image detected for tag ${{ env.TAG }}. Skipping build."
-             echo "is_deprecated=true" >> $GITHUB_OUTPUT
-           else
-             echo "is_deprecated=false" >> $GITHUB_OUTPUT
-           fi
-      
-      - name: Exit early if deprecated image detected
-        if: steps.image_deprecation_check.outputs.is_deprecated == 'true'
-        run: |
-          echo "Build skipped for deprecated or invalid image. Exiting."
-          exit 0
-
       - name: Check if Dockerfile exists
         id: file_check
         run: |
-          dockerfile_path="Dockerfile.${{ steps.context.outputs.image-base-name }}"
+          dockerfile_path="Dockerfile.${{ needs.generate-matrix.outputs.image-base-name }}"
           if [ -f "$dockerfile_path" ]; then
             echo "Dockerfile found at $dockerfile_path"
             echo "dockerfile_exists=true" >> $GITHUB_OUTPUT
@@ -105,36 +137,26 @@ jobs:
       - name: Exit early if Dockerfile does not exist
         if: steps.file_check.outputs.dockerfile_exists != 'true'
         run: |
-          echo "Dockerfile for ${{ steps.context.outputs.image-base-name }} does not exist. Halting build."
-          # This is not a failure, but a graceful stop.
+          echo "Dockerfile for ${{ needs.generate-matrix.outputs.image-base-name }} does not exist. Halting build."
           exit 0
 
       - name: Check if Dockerfile changed for this image
         id: dockerfile_check
         run: |
-          # For non-tag pushes, always proceed
           if [[ "${{ github.event_name }}" != "push" || "${{ github.ref_type }}" != "tag" ]]; then
             echo "dockerfile_changed=true" >> $GITHUB_OUTPUT
-            echo "Not a tag push, proceeding with build"
             exit 0
           fi
-
-          dockerfile_path="Dockerfile.${{ steps.context.outputs.image-base-name }}"
-          echo "Checking if $dockerfile_path was modified..."
-          # Get the previous tag for this image
-          prev_tag=$(git tag -l "release/${{ steps.context.outputs.image-base-name }}/v*" --sort=-version:refname | head -n 2 | tail -n 1)
+          dockerfile_path="Dockerfile.${{ needs.generate-matrix.outputs.image-base-name }}"
+          prev_tag=$(git tag -l "release/${{ needs.generate-matrix.outputs.image-base-name }}/v*" --sort=-version:refname | head -n 2 | tail -n 1)
           if [ -n "$prev_tag" ]; then
-            echo "Comparing with previous tag: $prev_tag"
-            if git diff --name-only "$prev_tag" HEAD | grep -q "^${dockerfile_path}$\""; then
+            if git diff --name-only "$prev_tag" HEAD | grep -q "^${dockerfile_path}$"; then
               echo "dockerfile_changed=true" >> $GITHUB_OUTPUT
-              echo "Dockerfile $dockerfile_path was modified since $prev_tag"
             else
               echo "dockerfile_changed=false" >> $GITHUB_OUTPUT
-              echo "Dockerfile $dockerfile_path was NOT modified since $prev_tag - skipping build"
             fi
           else
             echo "dockerfile_changed=true" >> $GITHUB_OUTPUT
-            echo "No previous tag found, assuming Dockerfile changed"
           fi
 
       - name: Exit early if Dockerfile unchanged
@@ -149,15 +171,10 @@ jobs:
         run: |
           image_name="${{ env.REGISTRY }}/${{ github.repository }}/${{ steps.context.outputs.image-name }}"
           tag="${{ steps.context.outputs.version }}"
-
-          echo "Checking if image already exists: $image_name:$tag"
-
           if docker manifest inspect "$image_name:$tag" >/dev/null 2>&1; then
             echo "image_exists=true" >> $GITHUB_OUTPUT
-            echo "Image already exists for tag $tag, will skip build"
           else
             echo "image_exists=false" >> $GITHUB_OUTPUT
-            echo "Image does not exist for tag $tag, will proceed with build"
           fi
 
       - name: Exit early if image already published
@@ -179,17 +196,16 @@ jobs:
         uses: docker/build-push-action@v6
         with:
           pull: true
-          file: Dockerfile.${{ steps.context.outputs.image-base-name }}
+          file: Dockerfile.${{ needs.generate-matrix.outputs.image-base-name }}
           platforms: ${{ matrix.platform }}
           load: true
           tags: ${{ github.repository }}/${{ steps.context.outputs.image-name }}:test
-          cache-from: type=gha,scope=${{ github.repository }}-${{ steps.context.outputs.image-name }}
-          cache-to: type=gha,mode=max,scope=${{ github.repository }}-${{ steps.context.outputs.image-name }}
+          cache-from: type=gha,scope=${{ github.repository }}-${{ needs.generate-matrix.outputs.image-base-name }}
+          cache-to: type=gha,mode=max,scope=${{ github.repository }}-${{ needs.generate-matrix.outputs.image-base-name }}
 
       - name: Output Docker Image Size for ${{ matrix.platform }}
         run: |
           image_tag="${{ github.repository }}/${{ steps.context.outputs.image-name }}:test"
-          echo "Getting size for image: $image_tag"
           size=$(docker images --format "table {{.Size}}" "$image_tag" | tail -n +2)
           echo "Docker image size for ${{ matrix.platform }}: $size"
 
@@ -201,49 +217,11 @@ jobs:
 
       - name: Run Container Structure Tests for ${{ matrix.platform }}
         run: |
-          image_base_name="${{ steps.context.outputs.image-base-name }}"
+          image_base_name="${{ needs.generate-matrix.outputs.image-base-name }}"
           test_config="tests/container-structure/${image_base_name}.yaml"
           image_tag="${{ github.repository }}/${{ steps.context.outputs.image-name }}:test"
-          
-          # Run tests if config exists
           if [ -f "$test_config" ]; then
-            echo "Running container structure tests with config: $test_config"
-            container-structure-test test \
-              --image "${{ github.repository }}/${{ steps.context.outputs.image-name }}:test" \
-              --config "$test_config"
-          else
-            echo "No container structure test config found at $test_config, skipping tests"
-          fi
-
-      - name: Run Trivy vulnerability scanner for ${{ matrix.platform }}
-        uses: aquasecurity/trivy-action@b6643a29fecd7f34b3597bc6acb0a98b03d33ff8
-        with:
-          scan-type: image
-          image-ref: ${{ github.repository }}/${{ steps.context.outputs.image-name }}:test
-          format: table
-          exit-code: "1"
-          ignore-unfixed: true
-          vuln-type: "os,library"
-          severity: "CRITICAL,HIGH,MEDIUM"
-
-      - name: Get installed package versions for ${{ matrix.platform }}
-        id: get_versions
-        run: |
-          # Download container-structure-test if not available
-          if ! command -v container-structure-test &> /dev/null; then
-            echo "Downloading container-structure-test..."
-            curl -LO https://storage.googleapis.com/container-structure-test/latest/container-structure-test-linux-amd64
-            chmod +x container-structure-test-linux-amd64
-            sudo mv container-structure-test-linux-amd64 /usr/local/bin/container-structure-test
-          fi
-          
-          # Run tests if config exists
-          test_config="tests/container-structure/${{ steps.context.outputs.image-base-name }}.yaml"
-          if [ -f "$test_config" ]; then
-            echo "Running container structure tests with config: $test_config"
-            container-structure-test test \
-              --image "${{ github.repository }}/${{ steps.context.outputs.image-name }}:test" \
-              --config "$test_config"
+            container-structure-test test --image "$image_tag" --config "$test_config"
           else
             echo "No container structure test config found at $test_config, skipping tests"
           fi
@@ -263,7 +241,7 @@ jobs:
         id: extract_versions
         uses: ./.github/actions/extract-versions
         with:
-          image-base-name: ${{ steps.context.outputs.image-base-name }}
+          image-base-name: ${{ needs.generate-matrix.outputs.image-base-name }}
           image-tag: ${{ github.repository }}/${{ steps.context.outputs.image-name }}:test
           platform: ${{ matrix.platform }}
           platform-suffix: ${{ steps.context.outputs.platform-suffix }}
@@ -277,602 +255,24 @@ jobs:
           retention-days: 1
           if-no-files-found: error
 
-      - name: Calculate version tags for all image types
-        id: version_tags
-        run: |
-          image_name="${{ steps.context.outputs.image-base-name }}"
-          
-          echo "Processing image: $image_name"
-          
-          # Initialize outputs
-          echo "has_version_tags=false" >> $GITHUB_OUTPUT
-          echo "major_tag=" >> $GITHUB_OUTPUT
-          echo "minor_tag=" >> $GITHUB_OUTPUT
-          echo "tool_version=" >> $GITHUB_OUTPUT
-          
-          case "$image_name" in
-            # Language images - extract runtime versions from /tmp/versions.txt
-            "python-*-base"|"nodejs-*-base"|"openjdk-*-base"|"go-*-base")
-              echo "Language image detected, extracting runtime versions..."
-              
-              if docker run --rm --platform ${{ matrix.platform }} \
-                 "${{ github.repository }}/${{ steps.context.outputs.image-name }}:test" \
-                 sh -c 'cat /tmp/versions.txt' > versions.txt 2>/dev/null; then
-                
-                echo "Successfully extracted versions.txt:"
-                cat versions.txt
-                
-                # Parse based on image type
-                case "$image_name" in
-                  "python-*-base")
-                    MAJOR_TAG=$(grep "python_major_tag=" versions.txt | cut -d'=' -f2)
-                    MINOR_TAG=$(grep "python_minor_tag=" versions.txt | cut -d'=' -f2)
-                    ;;;
-                  "nodejs-*-base")
-                    MAJOR_TAG=$(grep "nodejs_major_tag=" versions.txt | cut -d'=' -f2)
-                    MINOR_TAG=$(grep "nodejs_minor_tag=" versions.txt | cut -d'=' -f2)
-                    ;;;
-                  "openjdk-*-base")
-                    MAJOR_TAG=$(grep "java_major_tag=" versions.txt | cut -d'=' -f2)
-                    MINOR_TAG=$(grep "java_minor_tag=" versions.txt | cut -d'=' -f2)
-                    ;;;
-                  "go-*-base")
-                    MAJOR_TAG=$(grep "go_major_tag=" versions.txt | cut -d'=' -f2)
-                    MINOR_TAG=$(grep "go_minor_tag=" versions.txt | cut -d'=' -f2)
-                    ;;;
-                esac
-                
-                if [ -n "$MAJOR_TAG" ] && [ -n "$MINOR_TAG" ]; then
-                  echo "major_tag=$MAJOR_TAG" >> $GITHUB_OUTPUT
-                  echo "minor_tag=$MINOR_TAG" >> $GITHUB_OUTPUT
-                  echo "has_version_tags=true" >> $GITHUB_OUTPUT
-                  echo "✅ Runtime version tags: major=$MAJOR_TAG, minor=$MINOR_TAG"
-                fi
-                rm -f versions.txt
-              else
-                echo "⚠️  Failed to extract versions.txt from container"
-              fi
-              ;;;
-              
-            # Specialized tool images - extract tool versions directly
-            "fips-base")
-              echo "FIPS image detected, extracting OpenSSL version..."
-              
-              if OPENSSL_VERSION=$(docker run --rm --platform ${{ matrix.platform }} \
-                 "${{ github.repository }}/${{ steps.context.outputs.image-name }}:test" \
-                 /usr/local/ssl/bin/openssl version 2>/dev/null | awk '{print $2}'); then
-                
-                echo "OpenSSL version: $OPENSSL_VERSION"
-                
-                # Extract major.minor (e.g., 3.0.9 -> 3.0)
-                OPENSSL_MAJOR=$(echo "$OPENSSL_VERSION" | cut -d'.' -f1)
-                OPENSSL_MINOR=$(echo "$OPENSSL_VERSION" | cut -d'.' -f1-2)
-                
-                if [ -n "$OPENSSL_MAJOR" ] && [ -n "$OPENSSL_MINOR" ]; then
-                  echo "major_tag=openssl$OPENSSL_MAJOR" >> $GITHUB_OUTPUT
-                  echo "minor_tag=openssl$OPENSSL_MINOR" >> $GITHUB_OUTPUT
-                  echo "tool_version=$OPENSSL_VERSION" >> $GITHUB_OUTPUT
-                  echo "has_version_tags=true" >> $GITHUB_OUTPUT
-                  echo "✅ OpenSSL version tags: major=openssl$OPENSSL_MAJOR, minor=openssl$OPENSSL_MINOR"
-                fi
-              else
-                echo "⚠️  Failed to extract OpenSSL version"
-              fi
-              ;;;
-              
-            "nginx-base")
-              echo "Nginx image detected, extracting Nginx version..."
-              
-              # Extract nginx version using direct binary call
-              if NGINX_VERSION=$(docker run --rm --platform ${{ matrix.platform }} \
-                 --entrypoint="/usr/sbin/nginx" \
-                 "${{ github.repository }}/${{ steps.context.outputs.image-name }}:test" \
-                 -v 2>&1 | grep -o '[0-9]\+\.[0-9]\+\.[0-9]\+\' | head -1); then
-                
-                echo "Nginx version: $NGINX_VERSION"
-                
-                # Extract major.minor (e.g., 1.29.1 -> 1.29)
-                NGINX_MAJOR=$(echo "$NGINX_VERSION" | cut -d'.' -f1)
-                NGINX_MINOR=$(echo "$NGINX_VERSION" | cut -d'.' -f1-2)
-                
-                if [ -n "$NGINX_MAJOR" ] && [ -n "$NGINX_MINOR" ]; then
-                  echo "major_tag=nginx$NGINX_MAJOR" >> $GITHUB_OUTPUT
-                  echo "minor_tag=nginx$NGINX_MINOR" >> $GITHUB_OUTPUT
-                  echo "tool_version=$NGINX_VERSION" >> $GITHUB_OUTPUT
-                  echo "has_version_tags=true" >> $GITHUB_OUTPUT
-                  echo "✅ Nginx version tags: major=nginx$NGINX_MAJOR, minor=nginx$NGINX_MINOR"
-                fi
-              else
-                echo "⚠️  Failed to extract Nginx version"
-              fi
-              ;;;
-              
-            # Base images - no version tags needed
-            *)
-              echo "Base image ($image_name) - no version tags needed"
-              ;;;
-          esac
-
-      - name: Create version tags artifact
-        if: steps.version_tags.outputs.has_version_tags == 'true' && github.event_name == 'push' && github.ref_type == 'tag'
-        run: |
-          mkdir -p version_artifacts
-          echo "major_tag=${{ steps.version_tags.outputs.major_tag }}" > version_artifacts/version_tags.env
-          echo "minor_tag=${{ steps.version_tags.outputs.minor_tag }}" >> version_artifacts/version_tags.env
-          echo "has_version_tags=${{ steps.version_tags.outputs.has_version_tags }}" >> version_artifacts/version_tags.env
-
-      - name: Upload version tags as artifact
-        if: steps.version_tags.outputs.has_version_tags == 'true' && github.event_name == 'push' && github.ref_type == 'tag'
-        uses: actions/upload-artifact@v5
-        with:
-          name: version-tags-${{ steps.context.outputs.image-base-name }}-${{ steps.context.outputs.platform-suffix }}
-          path: version_artifacts/version_tags.env
-          retention-days: 1
-          if-no-files-found: warn
-
-      - name: Generate build timestamp
-        id: build_timestamp
-        run: echo "created=$(date -u +'%Y-%m-%dT%H:%M:%SZ')" >> $GITHUB_OUTPUT
-
-      - name: Extract metadata (tags, labels) for Docker
-        id: meta
-        uses: docker/metadata-action@v5.9.0
-        with:
-          images: ${{ env.REGISTRY }}/${{ github.repository }}/${{ steps.context.outputs.image-name }}
-          tags: |
-            # Standard tags: version, latest, dev-<sha>
-            type=raw,value=${{ steps.context.outputs.version }},enable=${{ github.event_name == 'push' && github.ref_type == 'tag' }}
-            type=raw,value=latest,enable=${{ github.event_name == 'push' && github.ref_type == 'tag' }}
-            type=raw,value=dev-${{ github.sha }},enable=${{ github.event_name != 'push' || github.ref_type != 'tag' }}
-
-            # Universal version tags for all image types
-            type=raw,value=${{ steps.version_tags.outputs.major_tag }},enable=${{ steps.version_tags.outputs.has_version_tags == 'true' && github.event_name == 'push' && github.ref_type == 'tag' }}
-            type=raw,value=${{ steps.version_tags.outputs.minor_tag }},enable=${{ steps.version_tags.outputs.has_version_tags == 'true' && github.event_name == 'push' && github.ref_type == 'tag' }}
-          labels: |
-            # See https://github.com/opencontainers/image-spec/blob/main/annotations.md
-            org.opencontainers.image.title=${{ steps.context.outputs.image-name }} (${{ matrix.platform }})
-            org.opencontainers.image.description=Base image for ${{ steps.context.outputs.image-base-name }} targeting ${{ matrix.platform }}
-            org.opencontainers.image.url=https://github.com/${{ github.repository }}
-            org.opencontainers.image.source=https://github.com/${{ github.repository }}.git
-            org.opencontainers.image.version=${{ steps.context.outputs.version }}
-            org.opencontainers.image.created=${{ steps.build_timestamp.outputs.created }}
-            org.opencontainers.image.revision=${{ github.sha }}
-            org.opencontainers.image.vendor=InterruptZero.io Inc.
-            org.opencontainers.image.platform=${{ matrix.platform }}
-            # Custom annotations
-            build-url=${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
-            # --- Add language version labels if available ---
-            # Python
-            python.version.major=${{ env.python_major_tag }}
-            python.version.minor=${{ env.python_minor_tag }}
-            python.version.full=${{ env.python }}
-            # Node.js
-            nodejs.version.major=${{ env.nodejs_major_tag }}
-            nodejs.version.minor=${{ env.nodejs_minor_tag }}
-            nodejs.version.full=${{ env.nodejs }}
-            # Java (OpenJDK)
-            java.version.major=${{ env.java_major_tag }}
-            java.version.minor=${{ env.java_minor_tag }}
-            java.version.full=${{ env.java }}
-            # Go
-            go.version.major=${{ env.go_major_tag }}
-            go.version.minor=${{ env.go_minor_tag }}
-            go.version.full=${{ env.go }}
-            org.opencontainers.image.architecture=${{ matrix.platform }}
-
-      - name: Auto-fix nginx compatibility (nginx-base only)
-        if: steps.context.outputs.image-base-name == 'nginx-base'
-        id: nginx-autofix
-        run: |
-          # Get versions (fixed grep for cross-platform compatibility)
-          CHAINGUARD_VERSION=$(docker run --rm --entrypoint="" cgr.dev/chainguard/nginx:latest nginx -v 2>&1 | grep -o 'nginx/[0-9][0-9.]*' | cut -d'/' -f2)
-          DOCKERFILE_VERSION=$(grep 'ARG NGINX_VERSION=' Dockerfile.nginx-base | cut -d'=' -f2)
-          CURRENT_HEADERS=$(grep 'ARG MORE_HEADERS_VERSION=' Dockerfile.nginx-base | cut -d'=' -f2)
-          
-          echo "Chainguard nginx: $CHAINGUARD_VERSION"
-          echo "Dockerfile nginx: $DOCKERFILE_VERSION" 
-          echo "Current headers-more: v$CURRENT_HEADERS"
-          
-          if [ "$CHAINGUARD_VERSION" != "$DOCKERFILE_VERSION" ]; then
-            echo "🔄 Nginx version mismatch detected - applying auto-fix"
-            
-            # Bump headers-more version by 0.01 (fixed calculation)
-            NEW_HEADERS=$(echo "$CURRENT_HEADERS + 0.01" | bc -l | awk '{printf "%.2f", $0}' | sed 's/\.00$//')
-            
-            echo "Auto-updating versions:"
-            echo "  nginx: $DOCKERFILE_VERSION → $CHAINGUARD_VERSION"
-            echo "  headers-more: v$CURRENT_HEADERS → v$NEW_HEADERS"
-            
-            # Backup original Dockerfile
-            cp Dockerfile.nginx-base Dockerfile.nginx-base.backup
-            
-            # Update Dockerfile
-            sed -i "s/ARG NGINX_VERSION=.*/ARG NGINX_VERSION=$CHAINGUARD_VERSION/" Dockerfile.nginx-base
-            sed -i "s/ARG MORE_HEADERS_VERSION=.*/ARG MORE_HEADERS_VERSION=$NEW_HEADERS/" Dockerfile.nginx-base
-            
-            # Test the build with --pull flag (with timeout for CI)
-            echo "Testing updated configuration..."
-            BUILD_SUCCESS=false
-            
-            # Use timeout if available (Linux CI), otherwise rely on GitHub Actions timeout
-            if command -v timeout >/dev/null 2>&1; then
-              TIMEOUT_CMD="timeout 300"
-            else
-              TIMEOUT_CMD=""
-            fi
-            
-            if $TIMEOUT_CMD docker build --pull -q -t test-nginx-updated -f Dockerfile.nginx-base . 2>build-error.log; then
-              echo "✅ Build phase successful"
-              
-              # Test module loading
-              if docker run --rm --entrypoint="" test-nginx-updated nginx -t 2>module-error.log; then
-                echo "✅ Module loading successful"
-                BUILD_SUCCESS=true
-              else
-                echo "❌ Module loading failed"
-                cat module-error.log
-              fi
-            else
-              echo "❌ Build phase failed"
-              cat build-error.log
-            fi
-            
-            if [ "$BUILD_SUCCESS" = "true" ]; then
-              echo "✅ Auto-fix successful - committing changes"
-              
-              # Commit the change
-              git config user.name "github-actions[bot]"
-              git config user.email "github-actions[bot]@users.noreply.github.com"
-              git add Dockerfile.nginx-base
-              git commit -m "Auto-fix: Update nginx to $CHAINGUARD_VERSION with headers-more v$NEW_HEADERS
-
-          🤖 Automated compatibility fix
-          - nginx: $DOCKERFILE_VERSION → $CHAINGUARD_VERSION  
-          - headers-more: v$CURRENT_HEADERS → v$NEW_HEADERS
-
-          Build and module loading tested successfully with --pull flag."
-              
-              echo "auto_fix_applied=true" >> $GITHUB_OUTPUT
-              echo "fix_successful=true" >> $GITHUB_OUTPUT
-              
-              # Clean up
-              rm -f Dockerfile.nginx-base.backup build-error.log module-error.log
-              docker rmi -f test-nginx-updated 2>/dev/null || true
-              
-            else
-              echo "❌ Auto-fix failed - restoring original Dockerfile"
-              mv Dockerfile.nginx-base.backup Dockerfile.nginx-base
-              
-              echo "fix_successful=false" >> $GITHUB_OUTPUT
-              echo "auto_fix_applied=true" >> $GITHUB_OUTPUT
-              echo "chainguard_version=$CHAINGUARD_VERSION" >> $GITHUB_OUTPUT
-              echo "dockerfile_version=$DOCKERFILE_VERSION" >> $GITHUB_OUTPUT
-              echo "current_headers=$CURRENT_HEADERS" >> $GITHUB_OUTPUT
-              echo "attempted_headers=$NEW_HEADERS" >> $GITHUB_OUTPUT
-            fi
-          else
-            echo "✅ Nginx versions match - no fix needed"
-            echo "auto_fix_applied=false" >> $GITHUB_OUTPUT
-          fi
-
-      - name: Create issue for failed auto-fix (nginx-base only)
-        if: steps.context.outputs.image-base-name == 'nginx-base' && steps.nginx-autofix.outputs.auto_fix_applied == 'true' && steps.nginx-autofix.outputs.fix_successful == 'false'
-        run: |
-          echo "🚨 Creating GitHub issue for failed auto-fix"
-          
-          # Collect error information
-          BUILD_ERRORS=""
-          MODULE_ERRORS=""
-          
-          if [ -f build-error.log ]; then
-            BUILD_ERRORS=$(cat build-error.log)
-          fi
-          
-          if [ -f module-error.log ]; then
-            MODULE_ERRORS=$(cat module-error.log)
-          fi
-          
-          # Use a temporary file to construct the body to avoid complex shell escaping issues with multi-line strings
-          ISSUE_BODY_FILE="$(mktemp)"
-          cat > "$ISSUE_BODY_FILE" << EOF
-          ## Auto-fix Failure Summary
-
-          **The automated nginx compatibility fix has failed and requires manual intervention.**
-
-          ### Version Details
-          - **Chainguard nginx version**: ${{ steps.nginx-autofix.outputs.chainguard_version }}
-          - **Our dockerfile version**: ${{ steps.nginx-autofix.outputs.dockerfile_version }}
-          - **Current headers-more**: v${{ steps.nginx-autofix.outputs.current_headers }}
-          - **Attempted headers-more**: v${{ steps.nginx-autofix.outputs.attempted_headers }}
-
-          ### What Failed
-          The automatic +0.01 version bump strategy failed during the nginx-base build process (tested with --pull flag).
-
-          ### Build Errors
-          ```
-          $BUILD_ERRORS
-          ```
-
-          ### Module Loading Errors
-          ```
-          $MODULE_ERRORS
-          ```
-
-          ### Manual Action Required
-          1. **Check compatibility matrix**: Visit [headers-more compatibility docs](https://github.com/openresty/headers-more-nginx-module#compatibility)
-          2. **Research available versions**: Check [available tags](https://github.com/openresty/headers-more-nginx-module/tags)
-          3. **Test manually with --pull**: 
-             ```bash
-             docker build --pull -t test-nginx -f Dockerfile.nginx-base .
-             docker run --rm --entrypoint="" test-nginx nginx -t
-             ```
-          4. **Update Dockerfile**: Modify Dockerfile.nginx-base with working combination
-          5. **Consider alternatives**: If no compatible version exists, research alternative nginx modules
-
-          ### Workflow Information
-          - **Workflow**: ${{ github.workflow }}
-          - **Run ID**: ${{ github.run_id }}
-          - **Commit**: ${{ github.sha }}
-          - **Triggered by**: ${{ github.event_name }}
-          ### Next Steps
-          - [ ] Research compatible headers-more version for nginx ${{ steps.nginx-autofix.outputs.chainguard_version }}
-          - [ ] Test proposed combination locally with --pull flag
-          - [ ] Update Dockerfile.nginx-base with working versions
-          - [ ] Consider improving auto-fix strategy if this becomes frequent
-
-          **This issue was automatically created by the nginx compatibility workflow.**
-          EOF
-          
-          gh issue create \
-            --title "🚨 Nginx auto-fix failed: nginx ${{ steps.nginx-autofix.outputs.chainguard_version }} + headers-more v${{ steps.nginx-autofix.outputs.attempted_headers }}" \
-            --body-file "$ISSUE_BODY_FILE" \
-            --label "bug,nginx,auto-fix-failed,needs-manual-intervention" \
-            --assignee "${{ github.actor }}"
-          
-          rm -f "$ISSUE_BODY_FILE" # Clean up temporary file
-
-      - name: Fail build on auto-fix failure (nginx-base only)
-        if: steps.context.outputs.image-base-name == 'nginx-base' && steps.nginx-autofix.outputs.auto_fix_applied == 'true' && steps.nginx-autofix.outputs.fix_successful == 'false'
-        run: |
-          echo "💥 BUILD FAILURE: Nginx auto-fix unsuccessful"
-          echo ""
-          echo "The nginx-base image cannot be built with the current configuration."
-          echo "A GitHub issue has been created for manual resolution."
-          echo ""
-          echo "Build will not proceed to prevent publishing a broken image."
-          
-          # Clean up temporary files
-          rm -f build-error.log module-error.log
-          
-          exit 1
-
       - name: Build and push Docker image for ${{ matrix.platform }}
         id: docker_build
         if: github.event_name == 'push' && github.ref_type == 'tag'
         uses: docker/build-push-action@v6
         with:
           pull: true
-          file: Dockerfile.${{ steps.context.outputs.image-base-name }}
+          file: Dockerfile.${{ needs.generate-matrix.outputs.image-base-name }}
           push: true
           platforms: ${{ matrix.platform }}
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
-          cache-from: type=gha,scope=${{ github.repository }}-${{ steps.context.outputs.image-name }}
-          cache-to: type=gha,mode=max,scope=${{ github.repository }}-${{ steps.context.outputs.image-name }}
-
-      - name: Install Cosign
-        if: github.event_name == 'push' && github.ref_type == 'tag'
-        uses: sigstore/cosign-installer@v3
-        
-      - name: Sign container image with Cosign
-        id: cosign_sign
-        if: "github.event_name == 'push' && github.ref_type == 'tag' && steps.docker_build.outputs.digest != ''"
-        env:
-          COSIGN_EXPERIMENTAL: 1
-        run: |
-          # Sign the image with keyless signing (uses OIDC)
-          echo "Signing image: ${{ env.REGISTRY }}/${{ github.repository }}/${{ steps.context.outputs.image-name }}@${{ steps.docker_build.outputs.digest }}"
-          cosign sign --yes \
-            ${{ env.REGISTRY }}/${{ github.repository }}/${{ steps.context.outputs.image-name }}@${{ steps.docker_build.outputs.digest }}
-          
-          # Get the Rekor log entry
-          REKOR_UUID=$(cosign verify \
-            --certificate-identity-regexp "https://github.com/${{ github.repository }}/.github/workflows/.*" \
-            --certificate-oidc-issuer "https://token.actions.githubusercontent.com" \
-            ${{ env.REGISTRY }}/${{ github.repository }}/${{ steps.context.outputs.image-name }}@${{ steps.docker_build.outputs.digest }} 2>&1 | \
-            grep -oP 'Rekor: \K[0-9a-f]{64}' | head -n1)
-          
-          if [ -n "$REKOR_UUID" ]; then
-            echo "rekor_uuid=$REKOR_UUID" >> $GITHUB_OUTPUT
-            echo "Rekor UUID: $REKOR_UUID"
-          fi
-          
-      - name: Attest build provenance for ${{ matrix.platform }}
-        id: attest_provenance
-        if: "github.event_name == 'push' && github.ref_type == 'tag' && steps.docker_build.outputs.digest != ''"
-        uses: actions/attest-build-provenance@977bb373ede98d70efdf65b84cb5f73e068dcc2a # v3.0.0
-        with:
-          # Create cryptographic attestation for build provenance
-          subject-name: ${{ env.REGISTRY }}/${{ github.repository }}/${{ steps.context.outputs.image-name }}
-          subject-digest: ${{ steps.docker_build.outputs.digest }}
-          push-to-registry: true
-
-      - name: Extract Sigstore logIndex for ${{ matrix.platform }}
-        id: extract_logindex
-        if: github.event_name == 'push' && github.ref_type == 'tag'
-        run: |
-          echo "Attestation URL: ${{ steps.attest_provenance.outputs.attestation-url }}"
-          echo "Bundle path: ${{ steps.attest_provenance.outputs.bundle-path }}"
-          
-          # Save provenance information to file
-          output_file="env.provenance.${{ steps.context.outputs.platform-suffix }}"
-          
-          # Extract logIndex from the attestation bundle
-          if [ -n "${{ steps.attest_provenance.outputs.bundle-path }}" ] && [ -f "${{ steps.attest_provenance.outputs.bundle-path }}" ]; then
-            # Debug: Show bundle structure and content
-            echo "Bundle structure keys:"
-            jq -r 'keys' "${{ steps.attest_provenance.outputs.bundle-path }}" || echo "Failed to get keys"
-            echo "Full bundle content (first 10 lines):"
-            head -10 "${{ steps.attest_provenance.outputs.bundle-path }}" || echo "Failed to read bundle"
-            
-            # Try multiple paths to extract logIndex with improved logic
-            LOG_INDEX=""
-            
-            # Path 1: Standard Sigstore bundle format
-            LOG_INDEX=$(jq -r '.verificationMaterial.tlogEntries[0].logIndex // empty' "${{ steps.attest_provenance.outputs.bundle-path }}" 2>/dev/null)
-            if [ -n "$LOG_INDEX" ] && [ "$LOG_INDEX" != "null" ]; then
-              echo "Found logIndex via path 1 (verificationMaterial.tlogEntries): $LOG_INDEX"
-            else
-              # Path 2: Alternative bundle format
-              LOG_INDEX=$(jq -r '.tlogEntries[0].logIndex // empty' "${{ steps.attest_provenance.outputs.bundle-path }}" 2>/dev/null)
-              if [ -n "$LOG_INDEX" ] && [ "$LOG_INDEX" != "null" ]; then
-                echo "Found logIndex via path 2 (tlogEntries): $LOG_INDEX"
-              else
-                # Path 3: Nested in x509 certificate chain
-                LOG_INDEX=$(jq -r '.verificationMaterial.x509CertificateChain.certificates[0].logIndex // empty' "${{ steps.attest_provenance.outputs.bundle-path }}" 2>/dev/null)
-                if [ -n "$LOG_INDEX" ] && [ "$LOG_INDEX" != "null" ]; then
-                  echo "Found logIndex via path 3 (x509CertificateChain): $LOG_INDEX"
-                else
-                  # Path 4: Check if it's wrapped in a different structure
-                  LOG_INDEX=$(jq -r '.bundle.verificationMaterial.tlogEntries[0].logIndex // .envelope.verificationMaterial.tlogEntries[0].logIndex // empty' "${{ steps.attest_provenance.outputs.bundle-path }}" 2>/dev/null)
-                  if [ -n "$LOG_INDEX" ] && [ "$LOG_INDEX" != "null" ]; then
-                    echo "Found logIndex via path 4 (nested bundle/envelope): $LOG_INDEX"
-                  fi
-                fi
-              fi
-            fi
-            
-            if [ -n "$LOG_INDEX" ] && [ "$LOG_INDEX" != "null" ]; then
-              echo "logindex=$LOG_INDEX" >> $GITHUB_OUTPUT
-              echo "sigstore_url=https://search.sigstore.dev/?logIndex=$LOG_INDEX" >> $GITHUB_OUTPUT
-              echo "Found Sigstore logIndex: $LOG_INDEX"
-              echo "Sigstore URL: https://search.sigstore.dev/?logIndex=$LOG_INDEX"
-              
-              # Save to file for release page generation
-              echo "GITHUB_ATTESTATION_URL=${{ steps.attest_provenance.outputs.attestation-url }}" > "$output_file"
-              echo "SIGSTORE_URL=https://search.sigstore.dev/?logIndex=$LOG_INDEX" >> "$output_file"
-              echo "LOG_INDEX=$LOG_INDEX" >> "$output_file"
-            else
-              echo "No logIndex found in attestation bundle via standard paths"
-              
-              # Enhanced fallback: Try to extract from attestation URL and alternative bundle parsing
-              ATTESTATION_URL="${{ steps.attest_provenance.outputs.attestation-url }}"
-              
-              # Fallback 1: Extract logIndex from attestation URL if available
-              URL_LOG_INDEX=""
-              if [ -n "$ATTESTATION_URL" ]; then
-                echo "Trying to extract logIndex from attestation URL: $ATTESTATION_URL"
-                URL_LOG_INDEX=$(echo "$ATTESTATION_URL" | grep -o 'logIndex=[0-9]\+' | cut -d'=' -f2 || echo "")
-                if [ -n "$URL_LOG_INDEX" ]; then
-                  echo "Found logIndex in URL: $URL_LOG_INDEX"
-                  LOG_INDEX="$URL_LOG_INDEX"
-                fi
-              fi
-              
-              # Fallback 2: Try cosign-style bundle parsing if available
-              echo "DEBUG: Bundle path: ${{ steps.attest_provenance.outputs.bundle-path }}"
-              echo "DEBUG: Bundle exists: $([ -f "${{ steps.attest_provenance.outputs.bundle-path }}" ] && echo 'YES' || echo 'NO')"
-              if [ -z "$LOG_INDEX" ] && [ -f "${{ steps.attest_provenance.outputs.bundle-path }}" ]; then
-                echo "Attempting alternative bundle parsing with cosign-style paths"
-                echo "DEBUG: Bundle content structure:"
-                jq -r 'keys' "${{ steps.attest_provenance.outputs.bundle-path }}" 2>/dev/null || echo "Failed to parse bundle as JSON"
-                # Try to find any numeric logIndex value in the bundle
-                LOG_INDEX=$(jq -r '.. | objects | select(has("logIndex")) | .logIndex' "${{ steps.attest_provenance.outputs.bundle-path }}" 2>/dev/null | head -1)
-                if [ -n "$LOG_INDEX" ] && [ "$LOG_INDEX" != "null" ]; then
-                  echo "Found logIndex via recursive search: $LOG_INDEX"
-                else
-                  # Try looking for logId which might be the same
-                  LOG_INDEX=$(jq -r '.. | objects | select(has("logId")) | .logId' "${{ steps.attest_provenance.outputs.bundle-path }}" 2>/dev/null | head -1)
-                  if [ -n "$LOG_INDEX" ] && [ "$LOG_INDEX" != "null" ]; then
-                    echo "Found logId (treating as logIndex): $LOG_INDEX"
-                  fi
-                fi
-              fi
-              
-              # Set outputs based on what we found
-              if [ -n "$LOG_INDEX" ] && [ "$LOG_INDEX" != "null" ]; then
-                echo "logindex=$LOG_INDEX" >> $GITHUB_OUTPUT
-                echo "sigstore_url=https://search.sigstore.dev/?logIndex=$LOG_INDEX" >> $GITHUB_OUTPUT
-                echo "Successfully recovered logIndex: $LOG_INDEX"
-                
-                # Save to file for release page generation
-                echo "GITHUB_ATTESTATION_URL=$ATTESTATION_URL" > "$output_file"
-                echo "SIGSTORE_URL=https://search.sigstore.dev/?logIndex=$LOG_INDEX" >> "$output_file"
-                echo "LOG_INDEX=$LOG_INDEX" >> "$output_file"
-              else
-                echo "Unable to extract logIndex from any source"
-                echo "logindex=" >> $GITHUB_OUTPUT
-                echo "sigstore_url=" >> $GITHUB_OUTPUT
-                
-                # Save GitHub attestation URL only
-                if [ -n "$ATTESTATION_URL" ]; then
-                  echo "GITHUB_ATTESTATION_URL=$ATTESTATION_URL" > "$output_file"
-                else
-                  echo "GITHUB_ATTESTATION_URL=" > "$output_file"
-                fi
-                echo "SIGSTORE_URL=" >> "$output_file"
-                echo "LOG_INDEX=" >> "$output_file"
-              fi
-            fi
-          else
-            echo "logindex=" >> $GITHUB_OUTPUT
-            echo "sigstore_url=" >> $GITHUB_OUTPUT
-            echo "Attestation bundle file not found"
-            
-            # Create empty file
-            echo "GITHUB_ATTESTATION_URL=" > "$output_file"
-            echo "SIGSTORE_URL=" >> "$output_file"
-            echo "LOG_INDEX=" >> "$output_file"
-          fi
-          
-          echo "provenance_file_path=$output_file" >> $GITHUB_OUTPUT
-
-      - name: Upload provenance artifact for ${{ matrix.platform }}
-        if: github.event_name == 'push' && github.ref_type == 'tag' && steps.extract_logindex.outputs.provenance_file_path != ''
-        uses: actions/upload-artifact@v5
-        with:
-          name: provenance-${{ steps.context.outputs.image-base-name }}-${{ steps.context.outputs.platform-suffix }}
-          path: ${{ steps.extract_logindex.outputs.provenance_file_path }}
-          retention-days: 1
-          if-no-files-found: warn
-
-      - name: Output SHA256 digest for ${{ matrix.platform }}
-        if: github.event_name == 'push' && github.ref_type == 'tag'
-        run: |
-          echo "SHA256 digest for ${{ steps.context.outputs.image-name }}: ${{ steps.docker_build.outputs.digest }}"
-
-      - name: Determine Repository Owner Type for ${{ matrix.platform }}
-        id: owner_type
-        if: "github.event_name == 'push' && github.ref_type == 'tag' && steps.docker_build.outputs.digest != ''"
-        env:
-          OWNER_LOGIN: ${{ github.repository_owner }} 
-          # GH_TOKEN is inherited from the job-level env
-        run: |
-          echo "Determining owner type for $OWNER_LOGIN"
-          OWNER_TYPE_JSON=$(gh api "users/$OWNER_LOGIN" --jq '.type')
-          # Remove quotes from JSON string output by jq
-          OWNER_TYPE=$(echo "$OWNER_TYPE_JSON" | tr -d '"')
-
-          echo "Raw type from API: '$OWNER_TYPE_JSON', Parsed type: '$OWNER_TYPE'"
-
-          if [ "$OWNER_TYPE" = "User" ]; then
-            echo "api_path_segment=users" >> $GITHUB_OUTPUT
-            echo "Determined owner type for $OWNER_LOGIN: User"
-          elif [ "$OWNER_TYPE" = "Organization" ]; then
-            echo "api_path_segment=orgs" >> $GITHUB_OUTPUT
-            echo "Determined owner type for $OWNER_LOGIN: Organization"
-          else
-            echo "::error::Could not determine owner type for '$OWNER_LOGIN'. Received type: '$OWNER_TYPE'."
-            echo "Full API response for users/$OWNER_LOGIN:"
-            gh api "users/$OWNER_LOGIN"
-            exit 1
-          fi
+          cache-from: type=gha,scope=${{ github.repository }}-${{ needs.generate-matrix.outputs.image-base-name }}
+          cache-to: type=gha,mode=max,scope=${{ github.repository }}-${{ needs.generate-matrix.outputs.image-base-name }}
 
   create_release:
+    needs: [generate-matrix, publish_image]
+    if: "github.event_name == 'push' && github.ref_type == 'tag' && needs.generate-matrix.outputs.is_deprecated != 'true'"
     runs-on: ubuntu-latest
-    needs: publish_image
-    # This ensures the step runs only if the image-base-name is not '__UNDEFINED__'.
-    if: "github.event_name == 'push' && github.ref_type == 'tag' && needs.publish_image.result == 'success' && needs.publish_image.outputs.image_deprecation_check_is_deprecated != 'true'"
     permissions:
       contents: write
       actions: read
@@ -884,16 +284,16 @@ jobs:
         id: parse_tag_release
         uses: ./.github/actions/parse-image-context
         with:
-          tag: ${{ github.ref }}
+          tag: ${{ env.TAG }}
           platform: linux/amd64  # Platform doesn't matter for release parsing
 
       - name: Download AMD64 versions artifact
         id: download_artifact_amd64
         if: |
-          steps.parse_tag_release.outputs.image-base-name == 'python-base' ||
-          steps.parse_tag_release.outputs.image-base-name == 'nodejs-base' ||
-          steps.parse_tag_release.outputs.image-base-name == 'openjdk17-base' ||
-          steps.parse_tag_release.outputs.image-base-name == 'go-base'
+          needs.generate-matrix.outputs.image-base-name == 'python-base' ||
+          needs.generate-matrix.outputs.image-base-name == 'nodejs-base' ||
+          needs.generate-matrix.outputs.image-base-name == 'openjdk17-base' ||
+          needs.generate-matrix.outputs.image-base-name == 'go-base'
         continue-on-error: true
         uses: actions/download-artifact@v6
         with:
@@ -903,10 +303,10 @@ jobs:
       - name: Download ARM64 versions artifact
         id: download_artifact_arm64
         if: |
-          steps.parse_tag_release.outputs.image-base-name == 'python-base' ||
-          steps.parse_tag_release.outputs.image-base-name == 'nodejs-base' ||
-          steps.parse_tag_release.outputs.image-base-name == 'openjdk17-base' ||
-          steps.parse_tag_release.outputs.image-base-name == 'go-base'
+          needs.generate-matrix.outputs.image-base-name == 'python-base' ||
+          needs.generate-matrix.outputs.image-base-name == 'nodejs-base' ||
+          needs.generate-matrix.outputs.image-base-name == 'openjdk17-base' ||
+          needs.generate-matrix.outputs.image-base-name == 'go-base'
         continue-on-error: true
         uses: actions/download-artifact@v6
         with:
@@ -918,7 +318,7 @@ jobs:
         continue-on-error: true
         uses: actions/download-artifact@v6
         with:
-          name: provenance-${{ steps.parse_tag_release.outputs.image-base-name }}-linux-amd64
+          name: provenance-${{ needs.generate-matrix.outputs.image-base-name }}-linux-amd64
           path: .
 
       - name: Download ARM64 provenance artifact
@@ -926,13 +326,13 @@ jobs:
         continue-on-error: true
         uses: actions/download-artifact@v6
         with:
-          name: provenance-${{ steps.parse_tag_release.outputs.image-base-name }}-linux-arm64
+          name: provenance-${{ needs.generate-matrix.outputs.image-base-name }}-linux-arm64
           path: .
 
       - name: Create GitHub Release Body
         id: release_body
         run: |
-          image_base_name="${{ steps.parse_tag_release.outputs.image-base-name }}"
+          image_base_name="${{ needs.generate-matrix.outputs.image-base-name }}"
           version_tag="${{ steps.parse_tag_release.outputs.version }}"
           repo_name="${{ github.repository }}"
           registry="${{ env.REGISTRY }}"
@@ -977,14 +377,14 @@ jobs:
 
           **Published Images & Tags:**
 
-          \*   **linux/amd64:**
-              \*   Image: \`${registry}/${repo_name}/${image_base_name}-linux-amd64\`
-              \*   Tag: \`${version_tag}\`
-              \*   Tag: \`latest\`
-          \*   **linux/arm64:**
-              \*   Image: \`${registry}/${repo_name}/${image_base_name}-linux-arm64\`
-              \*   Tag: \`${version_tag}\`
-              \*   Tag: \`latest\`
+          \\*   **linux/amd64:**
+              \\*   Image: \`${registry}/${repo_name}/${image_base_name}-linux-amd64\`
+              \\*   Tag: \`${version_tag}\`
+              \\*   Tag: \`latest\`
+          \\*   **linux/arm64:**
+              \\*   Image: \`${registry}/${repo_name}/${image_base_name}-linux-arm64\`
+              \\*   Tag: \`${version_tag}\`
+              \\*   Tag: \`latest\`
 
           **Dockerfile Example:**
           \`\`\`dockerfile
@@ -1007,10 +407,10 @@ jobs:
             echo "" >> "$RELEASE_BODY_FILE"
             echo "**Sigstore Transparency Log:**" >> "$RELEASE_BODY_FILE"
             if [ -n "$sigstore_amd64" ]; then
-              printf "* **AMD64**: [%s](%s)\n" "View in Sigstore" "$sigstore_amd64" >> "$RELEASE_BODY_FILE"
+              printf "* **AMD64**: [%s](%s)\\n" "View in Sigstore" "$sigstore_amd64" >> "$RELEASE_BODY_FILE"
             fi
             if [ -n "$sigstore_arm64" ]; then
-              printf "* **ARM64**: [%s](%s)\n" "View in Sigstore" "$sigstore_arm64" >> "$RELEASE_BODY_FILE"
+              printf "* **ARM64**: [%s](%s)\\n" "View in Sigstore" "$sigstore_arm64" >> "$RELEASE_BODY_FILE"
             fi
           fi
           
@@ -1018,10 +418,10 @@ jobs:
             echo "" >> "$RELEASE_BODY_FILE"
             echo "**GitHub Attestations:**" >> "$RELEASE_BODY_FILE"
             if [ -n "$github_attestation_amd64" ]; then
-              printf "* **AMD64**: [%s](%s)\n" "View Attestation" "$github_attestation_amd64" >> "$RELEASE_BODY_FILE"
+              printf "* **AMD64**: [%s](%s)\\n" "View Attestation" "$github_attestation_amd64" >> "$RELEASE_BODY_FILE"
             fi
             if [ -n "$github_attestation_arm64" ]; then
-              printf "* **ARM64**: [%s](%s)\n" "View Attestation" "$github_attestation_arm64" >> "$RELEASE_BODY_FILE"
+              printf "* **ARM64**: [%s](%s)\\n" "View Attestation" "$github_attestation_arm64" >> "$RELEASE_BODY_FILE"
             fi
           fi
           
@@ -1058,7 +458,7 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ github.ref_name }}
-          name: "Release ${{ steps.parse_tag_release.outputs.image-base-name }} ${{ steps.parse_tag_release.outputs.version }}"
+          name: "Release ${{ needs.generate-matrix.outputs.image-base-name }} ${{ steps.parse_tag_release.outputs.version }}"
           body: ${{ env.BODY_TEXT }}
           draft: false
           prerelease: ${{ contains(steps.parse_tag_release.outputs.version, '-') }}
@@ -1066,31 +466,15 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
   create_multiarch_manifests:
-    needs: [publish_image, create_release]
+    needs: [generate-matrix, publish_image, create_release]
+    if: "github.event_name == 'push' && github.ref_type == 'tag' && needs.generate-matrix.outputs.is_deprecated != 'true'"
     runs-on: ubuntu-latest
-    # This ensures the step runs only if the image-base-name is not '__UNDEFINED__'.
-    if: "github.event_name == 'push' && github.ref_type == 'tag' && needs.publish_image.result == 'success' && needs.create_release.result == 'success' && needs.publish_image.outputs.image_deprecation_check_is_deprecated != 'true'"
     permissions:
       contents: read
       packages: write
     steps:
       - name: Checkout repository
         uses: actions/checkout@v6
-
-      - name: Parse tag information
-        id: parse_tag
-        run: |
-          tag="${{ github.ref_name }}"
-          if [[ $tag =~ ^release/([^/]+)/(v.+)$ ]]; then
-            image_base_name="${BASH_REMATCH[1]}"
-            version="${BASH_REMATCH[2]}"
-            echo "image_base_name=$image_base_name" >> $GITHUB_OUTPUT
-            echo "version=$version" >> $GITHUB_OUTPUT
-            echo "Parsed: image=$image_base_name, version=$version"
-          else
-            echo "Invalid tag format: $tag"
-            exit 1
-          fi
 
       - name: Log in to Container Registry
         uses: docker/login-action@v3
@@ -1099,47 +483,10 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Extract version tags from artifacts
-        id: version_info
-        run: |
-          # Download version artifacts if they exist
-          image_name="${{ steps.parse_tag.outputs.image-base-name }}"
-          
-          # Try to download version artifacts from both platforms
-          mkdir -p version_artifacts
-          
-          # Check if artifacts exist and download them
-          for platform in linux-amd64 linux-arm64;
-          do
-            artifact_name="version-tags-$image_name-$platform"
-            echo "Checking for artifact: $artifact_name"
-            
-            # Download artifact if it exists (will fail silently if not found)
-            if gh run download ${{ github.run_id }} -n "$artifact_name" -D "version_artifacts/" 2>/dev/null || true; then
-              echo "Downloaded version artifact for $platform"
-              if [ -f "version_artifacts/version_tags.env" ]; then
-                source "version_artifacts/version_tags.env"
-                echo "major_tag=$major_tag" >> $GITHUB_OUTPUT
-                echo "minor_tag=$minor_tag" >> $GITHUB_OUTPUT
-                echo "has_version_tags=true" >> $GITHUB_OUTPUT
-                echo "Found version tags: major=$major_tag, minor=$minor_tag"
-                break
-              fi
-            fi
-          done
-          
-          # If no version tags found, mark as false
-          if [ ! -f "version_artifacts/version_tags.env" ]; then
-            echo "has_version_tags=false" >> $GITHUB_OUTPUT
-            echo "No version tags found"
-          fi
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
       - name: Create multi-arch manifests
         run: |
-          image_base_name="${{ steps.parse_tag.outputs.image-base-name }}"
-          version="${{ steps.parse_tag.outputs.version }}"
+          image_base_name="${{ needs.generate-matrix.outputs.image-base-name }}"
+          version="${{ steps.context.outputs.version }}"
           registry="${{ env.REGISTRY }}/${{ github.repository }}"
           
           echo "Creating multi-arch manifests for $image_base_name"
@@ -1194,9 +541,9 @@ jobs:
           docker manifest push "$universal_image:latest"
           
           # Create version-specific manifests if available
-          if [[ "${{ steps.version_info.outputs.has_version_tags }}" == "true" ]]; then
-            major_tag="${{ steps.version_info.outputs.major_tag }}"
-            minor_tag="${{ steps.version_info.outputs.minor_tag }}"
+          if [[ "${{ needs.publish_image.outputs.version_tags.has_version_tags }}" == "true" ]]; then
+            major_tag="${{ needs.publish_image.outputs.version_tags.major_tag }}"
+            minor_tag="${{ needs.publish_image.outputs.version_tags.minor_tag }}"
             
             if [[ -n "$major_tag" ]]; then
               echo "Creating manifest for $universal_image:$major_tag"
@@ -1233,8 +580,8 @@ jobs:
 
       - name: Verify multi-arch manifests
         run: |
-          image_base_name="${{ steps.parse_tag.outputs.image-base-name }}"
-          version="${{ steps.parse_tag.outputs.version }}"
+          image_base_name="${{ needs.generate-matrix.outputs.image-base-name }}"
+          version="${{ steps.context.outputs.version }}"
           registry="${{ env.REGISTRY }}/${{ github.repository }}"
           universal_image="$registry/$image_base_name"
           
@@ -1247,9 +594,9 @@ jobs:
           done
           
           # Verify version tags if they exist
-          if [[ "${{ steps.version_info.outputs.has_version_tags }}" == "true" ]]; then
-            major_tag="${{ steps.version_info.outputs.major_tag }}"
-            minor_tag="${{ steps.version_info.outputs.minor_tag }}"
+          if [[ "${{ needs.publish_image.outputs.version_tags.has_version_tags }}" == "true" ]]; then
+            major_tag="${{ needs.publish_image.outputs.version_tags.major_tag }}"
+            minor_tag="${{ needs.publish_image.outputs.version_tags.minor_tag }}"
             
             for tag in "$major_tag" "$minor_tag"; do
               if [[ -n "$tag" ]]; then
