@@ -4,7 +4,7 @@ name: Publish Base Docker images
 on:
   push:
     tags:
-      - "release/**"
+      - "release/*/*"
     branches:
       - main
   pull_request:
@@ -12,7 +12,6 @@ on:
 
 env:
   REGISTRY: ghcr.io
-  TAG: ${{ github.ref }}
 
 jobs:
   generate-matrix:
@@ -21,57 +20,52 @@ jobs:
       matrix: ${{ steps.set-matrix.outputs.matrix }}
       image-base-name: ${{ steps.context.outputs.image-base-name }}
       is_deprecated: ${{ steps.image_deprecation_check.outputs.is_deprecated }}
+      tag: ${{ steps.set-tag.outputs.tag }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@v6
         with:
           fetch-depth: 0 # Needed for git diff in PRs
 
-      - name: Detect image for PR builds
-        id: detect_image
-        if: github.event_name == 'pull_request'
+      - name: Set Tag and Detect Image for PR
+        id: set-tag
+        outputs:
+          tag: ${{ steps.script.outputs.tag }}
+          dockerfile_found: ${{ steps.script.outputs.dockerfile_found }}
         run: |
-          modified_dockerfile=$(git diff --name-only ${{ github.event.pull_request.base.sha }} ${{ github.sha }} | grep "^Dockerfile\\." | head -n 1)
-          if [ -n "$modified_dockerfile" ]; then
-            detected_image=$(echo "$modified_dockerfile" | sed 's/^Dockerfile\\.//')
-            if [[ "$detected_image" == "go-base" || "$detected_image" == "nodejs-base" || "$detected_image" == "python-base" ]]; then
-              echo "PR modifies a deprecated image ($detected_image). Halting build for this image."
-              echo "dockerfile_found=false" >> $GITHUB_OUTPUT
+          if [ "${{ github.event_name }}" == "pull_request" ]; then
+            modified_dockerfile=$(git diff --name-only ${{ github.event.pull_request.base.sha }} ${{ github.sha }} | grep "^Dockerfile\\." | head -n 1)
+            if [ -n "$modified_dockerfile" ]; then
+              detected_image=$(echo "$modified_dockerfile" | sed 's/^Dockerfile\\.//')
+              if [[ "$detected_image" == "go-base" || "$detected_image" == "nodejs-base" || "$detected_image" == "python-base" ]]; then
+                echo "dockerfile_found=false" >> $GITHUB_OUTPUT
+                echo "tag=${{ github.ref }}" >> $GITHUB_OUTPUT
+              else
+                detected_tag="release/${detected_image}/v0.0.0-pr"
+                echo "dockerfile_found=true" >> $GITHUB_OUTPUT
+                echo "tag=$detected_tag" >> $GITHUB_OUTPUT
+              fi
             else
-              detected_tag="release/${detected_image}/v0.0.0-pr"
-              echo "TAG=$detected_tag" >> $GITHUB_ENV
-              echo "dockerfile_found=true" >> $GITHUB_OUTPUT
-              echo "Detected image from PR: $detected_image, using tag: $detected_tag"
+              echo "dockerfile_found=false" >> $GITHUB_OUTPUT
+              echo "tag=${{ github.ref }}" >> $GITHUB_OUTPUT
             fi
           else
-            echo "dockerfile_found=false" >> $GITHUB_OUTPUT
-            echo "No Dockerfile changes detected in PR, will exit early"
+            echo "dockerfile_found=true" >> $GITHUB_OUTPUT
+            echo "tag=${{ github.ref }}" >> $GITHUB_OUTPUT
           fi
-
-      - name: Set TAG for context parsing
-        if: github.event_name == 'push' || (github.event_name == 'pull_request' && steps.detect_image.outputs.dockerfile_found == 'true')
-        run: |
-          if [ "${{ github.event_name }}" == "push" ]; then
-            echo "TAG=${{ github.ref }}" >> $GITHUB_ENV
-          else
-            # TAG is already set in detect_image step for PRs
-            echo "Using TAG from detect_image for PR: ${{ env.TAG }}"
-          fi
+        id: script
 
       - name: Parse image context
         id: context
-        if: github.event_name == 'push' || (github.event_name == 'pull_request' && steps.detect_image.outputs.dockerfile_found == 'true')
         uses: ./.github/actions/parse-image-context
         with:
-          tag: ${{ env.TAG }}
-          platform: "linux/amd64" # Platform doesn't matter for this step
+          tag: ${{ steps.set-tag.outputs.tag }}
+          platform: "linux/amd64"
 
       - name: Check for deprecated image after parsing
         id: image_deprecation_check
-        if: github.event_name == 'push' || (github.event_name == 'pull_request' && steps.detect_image.outputs.dockerfile_found == 'true')
         run: |
            if [ "${{ steps.context.outputs.image-base-name }}" == "__UNDEFINED__" ]; then
-             echo "Deprecated or invalid image detected for tag ${{ env.TAG }}. Skipping build."
              echo "is_deprecated=true" >> $GITHUB_OUTPUT
            else
              echo "is_deprecated=false" >> $GITHUB_OUTPUT
@@ -80,19 +74,21 @@ jobs:
       - name: Set matrix output
         id: set-matrix
         run: |
-          if [ "${{ steps.image_deprecation_check.outputs.is_deprecated }}" == "true" ] || ([ "${{ github.event_name }}" == "pull_request" ] && [ "${{ steps.detect_image.outputs.dockerfile_found }}" != "true" ]); then
-            echo "matrix={\"include\":[{\"platform\":\"__NONE__\"}]}" >> $GITHUB_OUTPUT
+          if [ "${{ steps.image_deprecation_check.outputs.is_deprecated }}" == "true" ] || ([ "${{ github.event_name }}" == "pull_request" ] && [ "${{ steps.set-tag.outputs.dockerfile_found }}" != "true" ]); then
+            echo "matrix={\"include\":[]}" >> $GITHUB_OUTPUT
           else
             echo "matrix={\"include\":[{\"platform\":\"linux/amd64\"},{\"platform\":\"linux/arm64\"}]}" >> $GITHUB_OUTPUT
           fi
 
   publish_image:
     needs: generate-matrix
-    if: needs.generate-matrix.outputs.is_deprecated != 'true'
+    if: needs.generate-matrix.outputs.is_deprecated != 'true' && needs.generate-matrix.outputs.matrix != '{\"include\":[{\"platform\":\"__NONE__\"}]}'
     runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.context.outputs.version }}
     env:
       GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      TAG: ${{ env.TAG }}
+      TAG: ${{ needs.generate-matrix.outputs.tag }}
     strategy:
       fail-fast: false
       matrix: ${{ fromJson(needs.generate-matrix.outputs.matrix) }}
@@ -127,10 +123,8 @@ jobs:
         run: |
           dockerfile_path="Dockerfile.${{ needs.generate-matrix.outputs.image-base-name }}"
           if [ -f "$dockerfile_path" ]; then
-            echo "Dockerfile found at $dockerfile_path"
             echo "dockerfile_exists=true" >> $GITHUB_OUTPUT
           else
-            echo "Dockerfile not found at $dockerfile_path"
             echo "dockerfile_exists=false" >> $GITHUB_OUTPUT
           fi
 
@@ -150,7 +144,7 @@ jobs:
           dockerfile_path="Dockerfile.${{ needs.generate-matrix.outputs.image-base-name }}"
           prev_tag=$(git tag -l "release/${{ needs.generate-matrix.outputs.image-base-name }}/v*" --sort=-version:refname | head -n 2 | tail -n 1)
           if [ -n "$prev_tag" ]; then
-            if git diff --name-only "$prev_tag" HEAD | grep -q "^${dockerfile_path}$"; then
+            if git diff --name-only "$prev_tag" HEAD | grep -q "^${dockerfile_path}$\"; then
               echo "dockerfile_changed=true" >> $GITHUB_OUTPUT
             else
               echo "dockerfile_changed=false" >> $GITHUB_OUTPUT
@@ -284,56 +278,19 @@ jobs:
         id: parse_tag_release
         uses: ./.github/actions/parse-image-context
         with:
-          tag: ${{ env.TAG }}
-          platform: linux/amd64  # Platform doesn't matter for release parsing
+          tag: ${{ needs.generate-matrix.outputs.tag }}
+          platform: linux/amd64
 
-      - name: Download AMD64 versions artifact
-        id: download_artifact_amd64
-        if: |
-          needs.generate-matrix.outputs.image-base-name == 'python-base' ||
-          needs.generate-matrix.outputs.image-base-name == 'nodejs-base' ||
-          needs.generate-matrix.outputs.image-base-name == 'openjdk17-base' ||
-          needs.generate-matrix.outputs.image-base-name == 'go-base'
-        continue-on-error: true
+      - name: Download artifacts
         uses: actions/download-artifact@v6
         with:
-          name: versions-file-linux-amd64
-          path: .
-
-      - name: Download ARM64 versions artifact
-        id: download_artifact_arm64
-        if: |
-          needs.generate-matrix.outputs.image-base-name == 'python-base' ||
-          needs.generate-matrix.outputs.image-base-name == 'nodejs-base' ||
-          needs.generate-matrix.outputs.image-base-name == 'openjdk17-base' ||
-          needs.generate-matrix.outputs.image-base-name == 'go-base'
-        continue-on-error: true
-        uses: actions/download-artifact@v6
-        with:
-          name: versions-file-linux-arm64
-          path: .
-
-      - name: Download AMD64 provenance artifact
-        id: download_provenance_amd64
-        continue-on-error: true
-        uses: actions/download-artifact@v6
-        with:
-          name: provenance-${{ needs.generate-matrix.outputs.image-base-name }}-linux-amd64
-          path: .
-
-      - name: Download ARM64 provenance artifact
-        id: download_provenance_arm64
-        continue-on-error: true
-        uses: actions/download-artifact@v6
-        with:
-          name: provenance-${{ needs.generate-matrix.outputs.image-base-name }}-linux-arm64
-          path: .
+          path: artifacts/
 
       - name: Create GitHub Release Body
         id: release_body
         run: |
           image_base_name="${{ needs.generate-matrix.outputs.image-base-name }}"
-          version_tag="${{ steps.parse_tag_release.outputs.version }}"
+          version_tag="${{ needs.publish_image.outputs.version }}"
           repo_name="${{ github.repository }}"
           registry="${{ env.REGISTRY }}"
 
@@ -350,18 +307,18 @@ jobs:
           sigstore_amd64="" github_attestation_amd64=""
           sigstore_arm64="" github_attestation_arm64=""
           
-          if [[ "${{ steps.download_provenance_amd64.outcome }}" == "success" ]]; then
+          if [[ "${{ needs.publish_image.outputs.download_provenance_amd64.outcome }}" == "success" ]]; then
               echo "Reading AMD64 provenance file..."
-              sigstore_amd64=$(get_version_value "env.provenance.linux-amd64" "SIGSTORE_URL")
-              github_attestation_amd64=$(get_version_value "env.provenance.linux-amd64" "GITHUB_ATTESTATION_URL")
+              sigstore_amd64=$(get_version_value "artifacts/provenance-${image_base_name}-linux-amd64/env.provenance.linux-amd64" "SIGSTORE_URL")
+              github_attestation_amd64=$(get_version_value "artifacts/provenance-${image_base_name}-linux-amd64/env.provenance.linux-amd64" "GITHUB_ATTESTATION_URL")
           else
               echo "AMD64 provenance artifact not downloaded or download failed."
           fi
           
-          if [[ "${{ steps.download_provenance_arm64.outcome }}" == "success" ]]; then
+          if [[ "${{ needs.publish_image.outputs.download_provenance_arm64.outcome }}" == "success" ]]; then
               echo "Reading ARM64 provenance file..."
-              sigstore_arm64=$(get_version_value "env.provenance.linux-arm64" "SIGSTORE_URL")
-              github_attestation_arm64=$(get_version_value "env.provenance.linux-arm64" "GITHUB_ATTESTATION_URL")
+              sigstore_arm64=$(get_version_value "artifacts/provenance-${image_base_name}-linux-arm64/env.provenance.linux-arm64" "SIGSTORE_URL")
+              github_attestation_arm64=$(get_version_value "artifacts/provenance-${image_base_name}-linux-arm64/env.provenance.linux-arm64" "GITHUB_ATTESTATION_URL")
           else
               echo "ARM64 provenance artifact not downloaded or download failed."
           fi
@@ -428,13 +385,13 @@ jobs:
           echo "" >> "$RELEASE_BODY_FILE"
           cat >> "$RELEASE_BODY_FILE" << EOF
           **🔐 Public Verification (No authentication required):**
-          ```bash
+          \`\`\`bash
           # Install cosign: https://docs.sigstore.dev/cosign/installation
           cosign verify \
             --certificate-identity-regexp "https://github.com/%s/.github/workflows/.*" \
             --certificate-oidc-issuer "https://token.actions.githubusercontent.com" \
             %s/%s/%s:latest | jq
-          ```
+          \`\`\`
           EOF
 
           # Replace the printf placeholder with actual values. This requires reading the file back.
@@ -454,12 +411,13 @@ jobs:
 
           rm -f "$RELEASE_BODY_FILE" # Clean up temporary file
 
+
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ github.ref_name }}
           name: "Release ${{ needs.generate-matrix.outputs.image-base-name }} ${{ steps.parse_tag_release.outputs.version }}"
-          body: ${{ env.BODY_TEXT }}
+          body_path: ${{ steps.release_body.outputs.body_path }}
           draft: false
           prerelease: ${{ contains(steps.parse_tag_release.outputs.version, '-') }}
         env:
@@ -475,18 +433,16 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v6
-
       - name: Log in to Container Registry
         uses: docker/login-action@v3
         with:
           registry: ${{ env.REGISTRY }}
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
-
       - name: Create multi-arch manifests
         run: |
           image_base_name="${{ needs.generate-matrix.outputs.image-base-name }}"
-          version="${{ steps.context.outputs.version }}"
+          version="${{ needs.publish_image.outputs.version }}"
           registry="${{ env.REGISTRY }}/${{ github.repository }}"
           
           echo "Creating multi-arch manifests for $image_base_name"
@@ -581,7 +537,7 @@ jobs:
       - name: Verify multi-arch manifests
         run: |
           image_base_name="${{ needs.generate-matrix.outputs.image-base-name }}"
-          version="${{ steps.context.outputs.version }}"
+          version="${{ needs.publish_image.outputs.version }}"
           registry="${{ env.REGISTRY }}/${{ github.repository }}"
           universal_image="$registry/$image_base_name"
           

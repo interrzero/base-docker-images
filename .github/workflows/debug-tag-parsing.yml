@@ -3,7 +3,7 @@ name: Debug Tag Parsing
 on:
   push:
     tags:
-      - "release/**"
+      - "release/*/*"
 
 jobs:
   debug:
