@@ -1,0 +1,38 @@
+name: Debug Tag Parsing
+
+on:
+  push:
+    tags:
+      - "release/**"
+
+jobs:
+  debug:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v5
+
+      - name: Dump Context and Parse Tag
+        id: debug_step
+        run: |
+          echo "--- Context Variables ---"
+          echo "github.ref: ${{ github.ref }}"
+          echo "github.ref_name: ${{ github.ref_name }}"
+          echo "github.ref_type: ${{ github.ref_type }}"
+          echo "-------------------------"
+
+      - name: Parse image context
+        id: context
+        uses: ./.github/actions/parse-image-context
+        with:
+          tag: ${{ github.ref }}
+          platform: "linux/amd64"
+
+      - name: Print Parser Output
+        run: |
+          echo "--- Parser Output ---"
+          echo "image-base-name: ${{ steps.context.outputs.image-base-name }}"
+          echo "version: ${{ steps.context.outputs.version }}"
+          echo "version-no-build: ${{ steps.context.outputs.version-no-build }}"
+          echo "is-release-tag: ${{ steps.context.outputs.is-release-tag }}"
+          echo "---------------------"

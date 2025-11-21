@@ -10,7 +10,7 @@ inputs:
   fallback-image:
     description: 'Fallback image name for non-release builds'
     required: false
-    default: 'python-base'
+    default: '__UNDEFINED__'
 outputs:
   image-base-name:
     description: 'Base image name (e.g., python-base)'
