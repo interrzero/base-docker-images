@@ -17,10 +17,10 @@ jobs:
   generate-matrix:
     runs-on: ubuntu-latest
     outputs:
-      matrix: ${{ steps.set-matrix.outputs.matrix }}
       image-base-name: ${{ steps.context.outputs.image-base-name }}
       is_deprecated: ${{ steps.image_deprecation_check.outputs.is_deprecated }}
       tag: ${{ steps.set-tag.outputs.tag }}
+      should_run_build: ${{ steps.set-should-run-build.outputs.should_run_build }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@v6
@@ -29,9 +29,6 @@ jobs:
 
       - name: Set Tag and Detect Image for PR
         id: set-tag
-        outputs:
-          tag: ${{ steps.script.outputs.tag }}
-          dockerfile_found: ${{ steps.script.outputs.dockerfile_found }}
         run: |
           if [ "${{ github.event_name }}" == "pull_request" ]; then
             modified_dockerfile=$(git diff --name-only ${{ github.event.pull_request.base.sha }} ${{ github.sha }} | grep "^Dockerfile\\." | head -n 1)
@@ -53,7 +50,6 @@ jobs:
             echo "dockerfile_found=true" >> $GITHUB_OUTPUT
             echo "tag=${{ github.ref }}" >> $GITHUB_OUTPUT
           fi
-        id: script
 
       - name: Parse image context
         id: context
@@ -71,18 +67,18 @@ jobs:
              echo "is_deprecated=false" >> $GITHUB_OUTPUT
            fi
 
-      - name: Set matrix output
-        id: set-matrix
+      - name: Set should_run_build output
+        id: set-should-run-build
         run: |
           if [ "${{ steps.image_deprecation_check.outputs.is_deprecated }}" == "true" ] || ([ "${{ github.event_name }}" == "pull_request" ] && [ "${{ steps.set-tag.outputs.dockerfile_found }}" != "true" ]); then
-            echo "matrix={\"include\":[]}" >> $GITHUB_OUTPUT
+            echo "should_run_build=false" >> $GITHUB_OUTPUT
           else
-            echo "matrix={\"include\":[{\"platform\":\"linux/amd64\"},{\"platform\":\"linux/arm64\"}]}" >> $GITHUB_OUTPUT
+            echo "should_run_build=true" >> $GITHUB_OUTPUT
           fi
 
   publish_image:
     needs: generate-matrix
-    if: needs.generate-matrix.outputs.is_deprecated != 'true' && needs.generate-matrix.outputs.matrix != '{\"include\":[{\"platform\":\"__NONE__\"}]}'
+    if: needs.generate-matrix.outputs.should_run_build == 'true'
     runs-on: ubuntu-latest
     outputs:
       version: ${{ steps.context.outputs.version }}
@@ -91,7 +87,8 @@ jobs:
       TAG: ${{ needs.generate-matrix.outputs.tag }}
     strategy:
       fail-fast: false
-      matrix: ${{ fromJson(needs.generate-matrix.outputs.matrix) }}
+      matrix:
+        platform: [linux/amd64, linux/arm64]
     permissions:
       contents: write
       packages: write
@@ -100,16 +97,15 @@ jobs:
       attestations: write
       id-token: write
     steps:
+      - name: Set build matrix
+        id: set-matrix
+        run: |
+          echo "matrix={\"include\":[{\"platform\":\"linux/amd64\"},{\"platform\":\"linux/arm64\"}]}" >> $GITHUB_ENV
+
       - name: Checkout repository
         uses: actions/checkout@v6
         with:
           fetch-depth: 0
-
-      - name: Skip job for dummy platform
-        if: matrix.platform == '__NONE__'
-        run: |
-          echo "Skipping build for dummy platform '__NONE__'."
-          exit 0
 
       - name: Parse image context
         id: context
@@ -265,7 +261,7 @@ jobs:
 
   create_release:
     needs: [generate-matrix, publish_image]
-    if: "github.event_name == 'push' && github.ref_type == 'tag' && needs.generate-matrix.outputs.is_deprecated != 'true'"
+    if: "github.event_name == 'push' && github.ref_type == 'tag' && needs.generate-matrix.outputs.should_run_build == 'true'"
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -425,7 +421,7 @@ jobs:
 
   create_multiarch_manifests:
     needs: [generate-matrix, publish_image, create_release]
-    if: "github.event_name == 'push' && github.ref_type == 'tag' && needs.generate-matrix.outputs.is_deprecated != 'true'"
+    if: "github.event_name == 'push' && github.ref_type == 'tag' && needs.generate-matrix.outputs.should_run_build == 'true'"
     runs-on: ubuntu-latest
     permissions:
       contents: read
