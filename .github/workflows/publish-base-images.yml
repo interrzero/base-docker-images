@@ -130,7 +130,7 @@ jobs:
           dockerfile_path="Dockerfile.${{ needs.generate-matrix.outputs.image-base-name }}"
           prev_tag=$(git tag -l "release/${{ needs.generate-matrix.outputs.image-base-name }}/v*" --sort=-version:refname | head -n 2 | tail -n 1)
           if [ -n "$prev_tag" ]; then
-            if git diff --name-only "$prev_tag" HEAD | grep -q "^${dockerfile_path}$\"; then
+            if git diff --name-only "$prev_tag" HEAD | grep -q "^${dockerfile_path}$"; then
               echo "dockerfile_changed=true" >> $GITHUB_OUTPUT
             else
               echo "dockerfile_changed=false" >> $GITHUB_OUTPUT
