@@ -177,7 +177,7 @@ jobs:
         with:
           images: ${{ env.REGISTRY }}/${{ github.repository }}/${{ steps.context.outputs.image-name }}
           tags: |
-            type=semver,pattern={{version}},value=${{ steps.context.outputs.version }},enable=${{ github.ref_type == 'tag' }}
+            type=raw,value=${{ steps.context.outputs.version }},enable=${{ github.ref_type == 'tag' }}
             type=raw,value=latest,enable=${{ github.ref_type == 'tag' }}
             type=raw,value=test,enable=${{ github.event_name == 'pull_request' }}
           labels: |
