@@ -4,7 +4,7 @@ name: Publish Base Docker images
 on:
   push:
     tags:
-      - "release/*/*"
+      - "release/**"
     branches:
       - main
   pull_request:
@@ -12,6 +12,7 @@ on:
 
 env:
   REGISTRY: ghcr.io
+  TAG: ${{ github.ref }}
 
 jobs:
   generate-matrix:
@@ -20,7 +21,6 @@ jobs:
       image-base-name: ${{ steps.context.outputs.image-base-name }}
       is_deprecated: ${{ steps.image_deprecation_check.outputs.is_deprecated }}
       tag: ${{ steps.set-tag.outputs.tag }}
-      should_run_build: ${{ steps.set-should-run-build.outputs.should_run_build }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@v6
@@ -35,16 +35,19 @@ jobs:
             if [ -n "$modified_dockerfile" ]; then
               detected_image=$(echo "$modified_dockerfile" | sed 's/^Dockerfile\\.//')
               if [[ "$detected_image" == "go-base" || "$detected_image" == "nodejs-base" || "$detected_image" == "python-base" ]]; then
+                echo "PR modifies a deprecated image ($detected_image). Halting build for this image."
                 echo "dockerfile_found=false" >> $GITHUB_OUTPUT
                 echo "tag=${{ github.ref }}" >> $GITHUB_OUTPUT
               else
                 detected_tag="release/${detected_image}/v0.0.0-pr"
                 echo "dockerfile_found=true" >> $GITHUB_OUTPUT
                 echo "tag=$detected_tag" >> $GITHUB_OUTPUT
+                echo "Detected image from PR: $detected_image, using tag: $detected_tag"
               fi
             else
               echo "dockerfile_found=false" >> $GITHUB_OUTPUT
               echo "tag=${{ github.ref }}" >> $GITHUB_OUTPUT
+              echo "No Dockerfile changes detected in PR, will exit early"
             fi
           else
             echo "dockerfile_found=true" >> $GITHUB_OUTPUT
@@ -62,23 +65,15 @@ jobs:
         id: image_deprecation_check
         run: |
            if [ "${{ steps.context.outputs.image-base-name }}" == "__UNDEFINED__" ]; then
+             echo "Deprecated or invalid image detected for tag ${{ steps.set-tag.outputs.tag }}. Skipping build."
              echo "is_deprecated=true" >> $GITHUB_OUTPUT
            else
              echo "is_deprecated=false" >> $GITHUB_OUTPUT
            fi
 
-      - name: Set should_run_build output
-        id: set-should-run-build
-        run: |
-          if [ "${{ steps.image_deprecation_check.outputs.is_deprecated }}" == "true" ] || ([ "${{ github.event_name }}" == "pull_request" ] && [ "${{ steps.set-tag.outputs.dockerfile_found }}" != "true" ]); then
-            echo "should_run_build=false" >> $GITHUB_OUTPUT
-          else
-            echo "should_run_build=true" >> $GITHUB_OUTPUT
-          fi
-
   publish_image:
     needs: generate-matrix
-    if: needs.generate-matrix.outputs.should_run_build == 'true'
+    if: needs.generate-matrix.outputs.is_deprecated != 'true'
     runs-on: ubuntu-latest
     outputs:
       version: ${{ steps.context.outputs.version }}
@@ -97,11 +92,6 @@ jobs:
       attestations: write
       id-token: write
     steps:
-      - name: Set build matrix
-        id: set-matrix
-        run: |
-          echo "matrix={\"include\":[{\"platform\":\"linux/amd64\"},{\"platform\":\"linux/arm64\"}]}" >> $GITHUB_ENV
-
       - name: Checkout repository
         uses: actions/checkout@v6
         with:
@@ -261,7 +251,7 @@ jobs:
 
   create_release:
     needs: [generate-matrix, publish_image]
-    if: "github.event_name == 'push' && github.ref_type == 'tag' && needs.generate-matrix.outputs.should_run_build == 'true'"
+    if: "github.event_name == 'push' && github.ref_type == 'tag' && needs.generate-matrix.outputs.is_deprecated != 'true'"
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -421,7 +411,7 @@ jobs:
 
   create_multiarch_manifests:
     needs: [generate-matrix, publish_image, create_release]
-    if: "github.event_name == 'push' && github.ref_type == 'tag' && needs.generate-matrix.outputs.should_run_build == 'true'"
+    if: "github.event_name == 'push' && github.ref_type == 'tag' && needs.generate-matrix.outputs.is_deprecated != 'true'"
     runs-on: ubuntu-latest
     permissions:
       contents: read
