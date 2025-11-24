@@ -171,22 +171,52 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
           platform: ${{ matrix.platform }}
 
-      - name: Build Docker Image for ${{ matrix.platform }} (Test)
-        id: build_test
+      - name: Extract metadata (tags, labels) for Docker
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ github.repository }}/${{ steps.context.outputs.image-name }}
+          tags: |
+            type=semver,pattern={{version}},value=${{ steps.context.outputs.version }},enable=${{ github.ref_type == 'tag' }}
+            type=raw,value=latest,enable=${{ github.ref_type == 'tag' }}
+            type=raw,value=test,enable=${{ github.event_name == 'pull_request' }}
+          labels: |
+            org.opencontainers.image.title=${{ steps.context.outputs.image-name }}
+            org.opencontainers.image.description=Hardened base image for ${{ needs.generate-matrix.outputs.image-base-name }}
+            org.opencontainers.image.vendor=InterruptZero.io
+            org.opencontainers.image.version=${{ steps.context.outputs.version }}
+
+      - name: Build Docker Image for ${{ matrix.platform }}
+        id: build
         uses: docker/build-push-action@v6
         with:
           pull: true
           file: Dockerfile.${{ needs.generate-matrix.outputs.image-base-name }}
           platforms: ${{ matrix.platform }}
-          load: true
-          tags: ${{ github.repository }}/${{ steps.context.outputs.image-name }}:test
+          load: ${{ github.event_name == 'pull_request' }}
+          push: ${{ github.event_name == 'push' && github.ref_type == 'tag' }}
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha,scope=${{ github.repository }}-${{ needs.generate-matrix.outputs.image-base-name }}
           cache-to: type=gha,mode=max,scope=${{ github.repository }}-${{ needs.generate-matrix.outputs.image-base-name }}
 
+      - name: Set test image reference
+        id: test_image
+        run: |
+          if [ "${{ github.event_name }}" == "pull_request" ]; then
+            echo "image_ref=${{ github.repository }}/${{ steps.context.outputs.image-name }}:test" >> $GITHUB_OUTPUT
+          else
+            echo "image_ref=${{ env.REGISTRY }}/${{ github.repository }}/${{ steps.context.outputs.image-name }}:${{ steps.context.outputs.version }}" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Pull image for testing (tag builds only)
+        if: github.event_name == 'push' && github.ref_type == 'tag'
+        run: |
+          docker pull ${{ steps.test_image.outputs.image_ref }}
+
       - name: Output Docker Image Size for ${{ matrix.platform }}
         run: |
-          image_tag="${{ github.repository }}/${{ steps.context.outputs.image-name }}:test"
-          size=$(docker images --format "table {{.Size}}" "$image_tag" | tail -n +2)
+          size=$(docker images --format "table {{.Size}}" "${{ steps.test_image.outputs.image_ref }}" | tail -n +2)
           echo "Docker image size for ${{ matrix.platform }}: $size"
 
       - name: Run container structure tests
@@ -199,9 +229,8 @@ jobs:
         run: |
           image_base_name="${{ needs.generate-matrix.outputs.image-base-name }}"
           test_config="tests/container-structure/${image_base_name}.yaml"
-          image_tag="${{ github.repository }}/${{ steps.context.outputs.image-name }}:test"
           if [ -f "$test_config" ]; then
-            container-structure-test test --image "$image_tag" --config "$test_config"
+            container-structure-test test --image "${{ steps.test_image.outputs.image_ref }}" --config "$test_config"
           else
             echo "No container structure test config found at $test_config, skipping tests"
           fi
@@ -210,7 +239,7 @@ jobs:
         uses: aquasecurity/trivy-action@b6643a29fecd7f34b3597bc6acb0a98b03d33ff8
         with:
           scan-type: image
-          image-ref: ${{ github.repository }}/${{ steps.context.outputs.image-name }}:test
+          image-ref: ${{ steps.test_image.outputs.image_ref }}
           format: table
           exit-code: "1"
           ignore-unfixed: true
@@ -222,7 +251,7 @@ jobs:
         uses: ./.github/actions/extract-versions
         with:
           image-base-name: ${{ needs.generate-matrix.outputs.image-base-name }}
-          image-tag: ${{ github.repository }}/${{ steps.context.outputs.image-name }}:test
+          image-tag: ${{ steps.test_image.outputs.image_ref }}
           platform: ${{ matrix.platform }}
           platform-suffix: ${{ steps.context.outputs.platform-suffix }}
 
@@ -234,20 +263,6 @@ jobs:
           path: ${{ steps.extract_versions.outputs.versions-file }}
           retention-days: 1
           if-no-files-found: error
-
-      - name: Build and push Docker image for ${{ matrix.platform }}
-        id: docker_build
-        if: github.event_name == 'push' && github.ref_type == 'tag'
-        uses: docker/build-push-action@v6
-        with:
-          pull: true
-          file: Dockerfile.${{ needs.generate-matrix.outputs.image-base-name }}
-          push: true
-          platforms: ${{ matrix.platform }}
-          tags: ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
-          cache-from: type=gha,scope=${{ github.repository }}-${{ needs.generate-matrix.outputs.image-base-name }}
-          cache-to: type=gha,mode=max,scope=${{ github.repository }}-${{ needs.generate-matrix.outputs.image-base-name }}
 
   create_release:
     needs: [generate-matrix, publish_image]
