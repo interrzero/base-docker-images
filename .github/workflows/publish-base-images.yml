@@ -257,7 +257,7 @@ jobs:
 
       - name: Upload versions artifact for ${{ matrix.platform }}
         if: steps.extract_versions.outputs.extraction-success == 'true' && github.event_name == 'push' && github.ref_type == 'tag'
-        uses: actions/upload-artifact@v5
+        uses: actions/upload-artifact@v6
         with:
           name: versions-file-${{ steps.context.outputs.platform-suffix }}
           path: ${{ steps.extract_versions.outputs.versions-file }}
@@ -284,8 +284,10 @@ jobs:
 
       - name: Download artifacts
         uses: actions/download-artifact@v6
+        continue-on-error: true
         with:
           path: artifacts/
+          pattern: versions-file-*
 
       - name: Create GitHub Release Body
         id: release_body
