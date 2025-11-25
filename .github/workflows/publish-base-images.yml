@@ -212,7 +212,7 @@ jobs:
       - name: Pull image for testing (tag builds only)
         if: github.event_name == 'push' && github.ref_type == 'tag'
         run: |
-          docker pull ${{ steps.test_image.outputs.image_ref }}
+          docker pull --platform ${{ matrix.platform }} ${{ steps.test_image.outputs.image_ref }}
 
       - name: Output Docker Image Size for ${{ matrix.platform }}
         run: |
