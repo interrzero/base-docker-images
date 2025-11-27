@@ -204,7 +204,7 @@ jobs:
         id: test_image
         run: |
           if [ "${{ github.event_name }}" == "pull_request" ]; then
-            echo "image_ref=${{ github.repository }}/${{ steps.context.outputs.image-name }}:test" >> $GITHUB_OUTPUT
+            echo "image_ref=${{ env.REGISTRY }}/${{ github.repository }}/${{ steps.context.outputs.image-name }}:test" >> $GITHUB_OUTPUT
           else
             echo "image_ref=${{ env.REGISTRY }}/${{ github.repository }}/${{ steps.context.outputs.image-name }}:${{ steps.context.outputs.version }}" >> $GITHUB_OUTPUT
           fi
