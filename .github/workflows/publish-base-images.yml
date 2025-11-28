@@ -389,25 +389,21 @@ jobs:
           fi
 
           echo "" >> "$RELEASE_BODY_FILE"
-          cat >> "$RELEASE_BODY_FILE" << EOF
+          cat >> "$RELEASE_BODY_FILE" <<'EOFVERIFY'
           **🔐 Public Verification (No authentication required):**
-          \`\`\`bash
+          ```bash
           # Install cosign: https://docs.sigstore.dev/cosign/installation
           cosign verify \
-            --certificate-identity-regexp "https://github.com/%s/.github/workflows/.*" \
+            --certificate-identity-regexp "https://github.com/REPO_NAME_PLACEHOLDER/.github/workflows/.*" \
             --certificate-oidc-issuer "https://token.actions.githubusercontent.com" \
-            %s/%s/%s:latest | jq
-          \`\`\`
-          EOF
+            REGISTRY_PLACEHOLDER/REPO_NAME_PLACEHOLDER/IMAGE_NAME_PLACEHOLDER:latest | jq
+          ```
+          EOFVERIFY
 
-          # Replace the printf placeholder with actual values. This requires reading the file back.
-          # The values needs to be escaped for sed.
-          ESCAPED_REPO_NAME=$(printf '%s' "$repo_name" | sed -e 's/[\/&]/\\&/g')
-          ESCAPED_REGISTRY=$(printf '%s' "$registry" | sed -e 's/[\/&]/\\&/g')
-          ESCAPED_IMAGE_BASE_NAME=$(printf '%s' "$image_base_name" | sed -e 's/[\/&]/\\&/g')
-
-          sed -i "s|%s/.github/workflows/.*|$ESCAPED_REPO_NAME/.github/workflows/.*|g" "$RELEASE_BODY_FILE"
-          sed -i "s|%s/%s/%s:latest|$ESCAPED_REGISTRY/$ESCAPED_REPO_NAME/$ESCAPED_IMAGE_BASE_NAME:latest|g" "$RELEASE_BODY_FILE"
+          # Replace placeholders with actual values
+          sed -i "s|REPO_NAME_PLACEHOLDER|${repo_name}|g" "$RELEASE_BODY_FILE"
+          sed -i "s|REGISTRY_PLACEHOLDER|${registry}|g" "$RELEASE_BODY_FILE"
+          sed -i "s|IMAGE_NAME_PLACEHOLDER|${image_base_name}|g" "$RELEASE_BODY_FILE"
 
           body_content=$(<"$RELEASE_BODY_FILE")
           echo "Setting BODY_TEXT environment variable..."
