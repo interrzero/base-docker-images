@@ -420,7 +420,7 @@ jobs:
         with:
           tag_name: ${{ github.ref_name }}
           name: "Release ${{ needs.generate-matrix.outputs.image-base-name }} ${{ steps.parse_tag_release.outputs.version }}"
-          body_path: ${{ steps.release_body.outputs.body_path }}
+          body: ${{ env.BODY_TEXT }}
           draft: false
           prerelease: ${{ contains(steps.parse_tag_release.outputs.version, '-') }}
         env:
