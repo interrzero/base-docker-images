@@ -389,21 +389,14 @@ jobs:
           fi
 
           echo "" >> "$RELEASE_BODY_FILE"
-          cat >> "$RELEASE_BODY_FILE" <<'EOFVERIFY'
-          **🔐 Public Verification (No authentication required):**
-          ```bash
-          # Install cosign: https://docs.sigstore.dev/cosign/installation
-          cosign verify \
-            --certificate-identity-regexp "https://github.com/REPO_NAME_PLACEHOLDER/.github/workflows/.*" \
-            --certificate-oidc-issuer "https://token.actions.githubusercontent.com" \
-            REGISTRY_PLACEHOLDER/REPO_NAME_PLACEHOLDER/IMAGE_NAME_PLACEHOLDER:latest | jq
-          ```
-          EOFVERIFY
-
-          # Replace placeholders with actual values
-          sed -i "s|REPO_NAME_PLACEHOLDER|${repo_name}|g" "$RELEASE_BODY_FILE"
-          sed -i "s|REGISTRY_PLACEHOLDER|${registry}|g" "$RELEASE_BODY_FILE"
-          sed -i "s|IMAGE_NAME_PLACEHOLDER|${image_base_name}|g" "$RELEASE_BODY_FILE"
+          echo "**🔐 Public Verification (No authentication required):**" >> "$RELEASE_BODY_FILE"
+          echo '```bash' >> "$RELEASE_BODY_FILE"
+          echo "# Install cosign: https://docs.sigstore.dev/cosign/installation" >> "$RELEASE_BODY_FILE"
+          echo "cosign verify \\" >> "$RELEASE_BODY_FILE"
+          echo "  --certificate-identity-regexp \"https://github.com/${repo_name}/.github/workflows/.*\" \\" >> "$RELEASE_BODY_FILE"
+          echo "  --certificate-oidc-issuer \"https://token.actions.githubusercontent.com\" \\" >> "$RELEASE_BODY_FILE"
+          echo "  ${registry}/${repo_name}/${image_base_name}:latest | jq" >> "$RELEASE_BODY_FILE"
+          echo '```' >> "$RELEASE_BODY_FILE"
 
           body_content=$(<"$RELEASE_BODY_FILE")
           echo "Setting BODY_TEXT environment variable..."
