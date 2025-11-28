@@ -197,6 +197,8 @@ jobs:
           push: ${{ github.event_name == 'push' && github.ref_type == 'tag' }}
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
+          provenance: ${{ github.event_name == 'push' && github.ref_type == 'tag' && 'mode=max' || 'false' }}
+          sbom: ${{ github.event_name == 'push' && github.ref_type == 'tag' }}
           cache-from: type=gha,scope=${{ github.repository }}-${{ needs.generate-matrix.outputs.image-base-name }}
           cache-to: type=gha,mode=max,scope=${{ github.repository }}-${{ needs.generate-matrix.outputs.image-base-name }}
 
