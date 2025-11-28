@@ -299,38 +299,9 @@ jobs:
           repo_name="${{ github.repository }}"
           registry="${{ env.REGISTRY }}"
 
-          # Function to extract value from a versions file
-          get_version_value() {
-            local file="$1"
-            local key="$2"
-            if [ -f "$file" ]; then
-              grep "^${key}=" "$file" | cut -d'=' -f2
-            fi
-          }
-
-          # Read provenance information if files exist
-          sigstore_amd64="" github_attestation_amd64=""
-          sigstore_arm64="" github_attestation_arm64=""
-          
-          if [[ "${{ needs.publish_image.outputs.download_provenance_amd64.outcome }}" == "success" ]]; then
-              echo "Reading AMD64 provenance file..."
-              sigstore_amd64=$(get_version_value "artifacts/provenance-${image_base_name}-linux-amd64/env.provenance.linux-amd64" "SIGSTORE_URL")
-              github_attestation_amd64=$(get_version_value "artifacts/provenance-${image_base_name}-linux-amd64/env.provenance.linux-amd64" "GITHUB_ATTESTATION_URL")
-          else
-              echo "AMD64 provenance artifact not downloaded or download failed."
-          fi
-          
-          if [[ "${{ needs.publish_image.outputs.download_provenance_arm64.outcome }}" == "success" ]]; then
-              echo "Reading ARM64 provenance file..."
-              sigstore_arm64=$(get_version_value "artifacts/provenance-${image_base_name}-linux-arm64/env.provenance.linux-arm64" "SIGSTORE_URL")
-              github_attestation_arm64=$(get_version_value "artifacts/provenance-${image_base_name}-linux-arm64/env.provenance.linux-arm64" "GITHUB_ATTESTATION_URL")
-          else
-              echo "ARM64 provenance artifact not downloaded or download failed."
-          fi
-
           # Use a temporary file to construct the body
           RELEASE_BODY_FILE="$(mktemp)"
-          
+
           cat > "$RELEASE_BODY_FILE" << EOF
           Platform-specific Docker images for \`$image_base_name\` version \`$version_tag\` pushed.
 
@@ -364,39 +335,23 @@ jobs:
           \`\`\`
 
           **🔐 Build Provenance & Supply Chain Security:**
+
+          This image is built with SLSA provenance attestations (\`provenance: mode=max\`) and SBOM.
+
+          **Public Verification (no authentication required):**
+          \`\`\`bash
+          # Install cosign: https://docs.sigstore.dev/cosign/installation
+          cosign verify \\
+            --certificate-identity-regexp "https://github.com/${repo_name}/.github/workflows/.*" \\
+            --certificate-oidc-issuer "https://token.actions.githubusercontent.com" \\
+            ${registry}/${repo_name}/${image_base_name}:latest | jq
+          \`\`\`
+
+          **Inspect attestations:**
+          \`\`\`bash
+          docker buildx imagetools inspect ${registry}/${repo_name}/${image_base_name}:latest --format "{{json .Provenance}}"
+          \`\`\`
           EOF
-
-          if [ -n "$sigstore_amd64" ] || [ -n "$sigstore_arm64" ]; then
-            echo "" >> "$RELEASE_BODY_FILE"
-            echo "**Sigstore Transparency Log:**" >> "$RELEASE_BODY_FILE"
-            if [ -n "$sigstore_amd64" ]; then
-              printf "* **AMD64**: [%s](%s)\\n" "View in Sigstore" "$sigstore_amd64" >> "$RELEASE_BODY_FILE"
-            fi
-            if [ -n "$sigstore_arm64" ]; then
-              printf "* **ARM64**: [%s](%s)\\n" "View in Sigstore" "$sigstore_arm64" >> "$RELEASE_BODY_FILE"
-            fi
-          fi
-
-          if [ -n "$github_attestation_amd64" ] || [ -n "$github_attestation_arm64" ]; then
-            echo "" >> "$RELEASE_BODY_FILE"
-            echo "**GitHub Attestations:**" >> "$RELEASE_BODY_FILE"
-            if [ -n "$github_attestation_amd64" ]; then
-              printf "* **AMD64**: [%s](%s)\\n" "View Attestation" "$github_attestation_amd64" >> "$RELEASE_BODY_FILE"
-            fi
-            if [ -n "$github_attestation_arm64" ]; then
-              printf "* **ARM64**: [%s](%s)\\n" "View Attestation" "$github_attestation_arm64" >> "$RELEASE_BODY_FILE"
-            fi
-          fi
-
-          echo "" >> "$RELEASE_BODY_FILE"
-          echo "**🔐 Public Verification (No authentication required):**" >> "$RELEASE_BODY_FILE"
-          echo '```bash' >> "$RELEASE_BODY_FILE"
-          echo "# Install cosign: https://docs.sigstore.dev/cosign/installation" >> "$RELEASE_BODY_FILE"
-          echo "cosign verify \\" >> "$RELEASE_BODY_FILE"
-          echo "  --certificate-identity-regexp \"https://github.com/${repo_name}/.github/workflows/.*\" \\" >> "$RELEASE_BODY_FILE"
-          echo "  --certificate-oidc-issuer \"https://token.actions.githubusercontent.com\" \\" >> "$RELEASE_BODY_FILE"
-          echo "  ${registry}/${repo_name}/${image_base_name}:latest | jq" >> "$RELEASE_BODY_FILE"
-          echo '```' >> "$RELEASE_BODY_FILE"
 
           body_content=$(<"$RELEASE_BODY_FILE")
           echo "Setting BODY_TEXT environment variable..."
