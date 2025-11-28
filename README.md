@@ -47,6 +47,41 @@ This repository is a work in progress, but the produced images are considered st
 * [python-3.13-base-linux-arm64](https://github.com/interrzero/base-docker-images/pkgs/container/base-docker-images%2Fpython-3.13-base-linux-arm64)
 * [wolfi-base-linux-arm64](https://github.com/interrzero/base-docker-images/pkgs/container/base-docker-images%2Fwolfi-base-linux-arm64)
 
+## Supply Chain Security
+
+All images are built with supply chain security features:
+
+| Feature | Status | Description |
+|---------|--------|-------------|
+| **SLSA Provenance** | Level 2 | Full build provenance with `provenance: mode=max` |
+| **SBOM** | Enabled | Software Bill of Materials attached to images |
+| **Cosign Signing** | Enabled | Keyless signing via GitHub OIDC |
+| **GitHub Attestations** | Enabled | Verifiable via `gh attestation verify` |
+
+### Verify Image Signatures
+
+Platform-specific images (`-linux-amd64`, `-linux-arm64`) include full attestations.
+
+**Using cosign:**
+```bash
+cosign verify \
+  --certificate-identity-regexp "https://github.com/interrzero/base-docker-images/.github/workflows/.*" \
+  --certificate-oidc-issuer "https://token.actions.githubusercontent.com" \
+  ghcr.io/interrzero/base-docker-images/wolfi-base-linux-amd64:latest
+```
+
+**Using GitHub CLI:**
+```bash
+gh attestation verify oci://ghcr.io/interrzero/base-docker-images/wolfi-base-linux-amd64:latest \
+  -R interrzero/base-docker-images
+```
+
+**Inspect SLSA Provenance:**
+```bash
+docker buildx imagetools inspect ghcr.io/interrzero/base-docker-images/wolfi-base-linux-amd64:latest \
+  --format "{{json .Provenance}}"
+```
+
 ## Hardening
 
 Images are considered hardened when they do not contain fixed CVE vulnerabilities of the following severities: CRITICAL, HIGH, MEDIUM. They are based on [wolfi-base](<https://edu.chainguard.dev/open-source/wolfi/overview/>) from Chainguard. We use Renovate to automatically update each of these base images to the most recently published image ([`latest`](https://edu.chainguard.dev/chainguard/chainguard-images/reference/wolfi-base/tags_history/)).
