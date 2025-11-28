@@ -336,20 +336,32 @@ jobs:
 
           **🔐 Build Provenance & Supply Chain Security:**
 
-          This image is built with SLSA provenance attestations (\`provenance: mode=max\`) and SBOM.
+          Platform-specific images include full SLSA provenance attestations (\`provenance: mode=max\`) and SBOM.
 
-          **Public Verification (no authentication required):**
+          **Verify image signatures (cosign):**
           \`\`\`bash
-          # Install cosign: https://docs.sigstore.dev/cosign/installation
+          # AMD64
           cosign verify \\
             --certificate-identity-regexp "https://github.com/${repo_name}/.github/workflows/.*" \\
             --certificate-oidc-issuer "https://token.actions.githubusercontent.com" \\
-            ${registry}/${repo_name}/${image_base_name}:latest | jq
+            ${registry}/${repo_name}/${image_base_name}-linux-amd64:latest
+
+          # ARM64
+          cosign verify \\
+            --certificate-identity-regexp "https://github.com/${repo_name}/.github/workflows/.*" \\
+            --certificate-oidc-issuer "https://token.actions.githubusercontent.com" \\
+            ${registry}/${repo_name}/${image_base_name}-linux-arm64:latest
           \`\`\`
 
-          **Inspect attestations:**
+          **Inspect SLSA provenance:**
           \`\`\`bash
-          docker buildx imagetools inspect ${registry}/${repo_name}/${image_base_name}:latest --format "{{json .Provenance}}"
+          # AMD64
+          docker buildx imagetools inspect ${registry}/${repo_name}/${image_base_name}-linux-amd64:latest \\
+            --format "{{json .Provenance}}"
+
+          # ARM64
+          docker buildx imagetools inspect ${registry}/${repo_name}/${image_base_name}-linux-arm64:latest \\
+            --format "{{json .Provenance}}"
           \`\`\`
           EOF
 
