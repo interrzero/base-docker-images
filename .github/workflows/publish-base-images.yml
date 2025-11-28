@@ -202,6 +202,30 @@ jobs:
           cache-from: type=gha,scope=${{ github.repository }}-${{ needs.generate-matrix.outputs.image-base-name }}
           cache-to: type=gha,mode=max,scope=${{ github.repository }}-${{ needs.generate-matrix.outputs.image-base-name }}
 
+      - name: Install cosign
+        if: github.event_name == 'push' && github.ref_type == 'tag'
+        uses: sigstore/cosign-installer@v3
+
+      - name: Sign container image with cosign
+        if: github.event_name == 'push' && github.ref_type == 'tag'
+        env:
+          DIGEST: ${{ steps.build.outputs.digest }}
+          TAGS: ${{ steps.meta.outputs.tags }}
+        run: |
+          images=""
+          for tag in ${TAGS}; do
+            images+="${tag}@${DIGEST} "
+          done
+          cosign sign --yes ${images}
+
+      - name: Generate artifact attestation
+        if: github.event_name == 'push' && github.ref_type == 'tag'
+        uses: actions/attest-build-provenance@v2
+        with:
+          subject-name: ${{ env.REGISTRY }}/${{ github.repository }}/${{ steps.context.outputs.image-name }}
+          subject-digest: ${{ steps.build.outputs.digest }}
+          push-to-registry: true
+
       - name: Set test image reference
         id: test_image
         run: |
@@ -353,14 +377,20 @@ jobs:
             ${registry}/${repo_name}/${image_base_name}-linux-arm64:latest
           \`\`\`
 
-          **Inspect SLSA provenance:**
+          **Verify with GitHub CLI:**
           \`\`\`bash
           # AMD64
-          docker buildx imagetools inspect ${registry}/${repo_name}/${image_base_name}-linux-amd64:latest \\
-            --format "{{json .Provenance}}"
+          gh attestation verify oci://${registry}/${repo_name}/${image_base_name}-linux-amd64:latest \\
+            -R ${repo_name}
 
           # ARM64
-          docker buildx imagetools inspect ${registry}/${repo_name}/${image_base_name}-linux-arm64:latest \\
+          gh attestation verify oci://${registry}/${repo_name}/${image_base_name}-linux-arm64:latest \\
+            -R ${repo_name}
+          \`\`\`
+
+          **Inspect SLSA provenance:**
+          \`\`\`bash
+          docker buildx imagetools inspect ${registry}/${repo_name}/${image_base_name}-linux-amd64:latest \\
             --format "{{json .Provenance}}"
           \`\`\`
           EOF
