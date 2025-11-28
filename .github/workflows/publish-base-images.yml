@@ -364,6 +364,7 @@ jobs:
           \`\`\`
 
           **🔐 Build Provenance & Supply Chain Security:**
+          EOF
 
           if [ -n "$sigstore_amd64" ] || [ -n "$sigstore_arm64" ]; then
             echo "" >> "$RELEASE_BODY_FILE"
@@ -375,7 +376,7 @@ jobs:
               printf "* **ARM64**: [%s](%s)\\n" "View in Sigstore" "$sigstore_arm64" >> "$RELEASE_BODY_FILE"
             fi
           fi
-          
+
           if [ -n "$github_attestation_amd64" ] || [ -n "$github_attestation_arm64" ]; then
             echo "" >> "$RELEASE_BODY_FILE"
             echo "**GitHub Attestations:**" >> "$RELEASE_BODY_FILE"
@@ -386,7 +387,7 @@ jobs:
               printf "* **ARM64**: [%s](%s)\\n" "View Attestation" "$github_attestation_arm64" >> "$RELEASE_BODY_FILE"
             fi
           fi
-          
+
           echo "" >> "$RELEASE_BODY_FILE"
           cat >> "$RELEASE_BODY_FILE" << EOF
           **🔐 Public Verification (No authentication required):**
