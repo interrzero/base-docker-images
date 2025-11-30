@@ -193,12 +193,12 @@ jobs:
           pull: true
           file: Dockerfile.${{ needs.generate-matrix.outputs.image-base-name }}
           platforms: ${{ matrix.platform }}
-          load: ${{ github.event_name == 'pull_request' }}
-          push: ${{ github.event_name == 'push' && github.ref_type == 'tag' }}
+          load: true
+          push: false
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
-          provenance: ${{ github.event_name == 'push' && github.ref_type == 'tag' && 'mode=max' || 'false' }}
-          sbom: ${{ github.event_name == 'push' && github.ref_type == 'tag' }}
+          provenance: false
+          sbom: false
           cache-from: type=gha,scope=${{ github.repository }}-${{ needs.generate-matrix.outputs.image-base-name }}
           cache-to: type=gha,mode=max,scope=${{ github.repository }}-${{ needs.generate-matrix.outputs.image-base-name }}
 
@@ -235,11 +235,6 @@ jobs:
             echo "image_ref=${{ env.REGISTRY }}/${{ github.repository }}/${{ steps.context.outputs.image-name }}:${{ steps.context.outputs.version }}" >> $GITHUB_OUTPUT
           fi
 
-      - name: Pull image for testing (tag builds only)
-        if: github.event_name == 'push' && github.ref_type == 'tag'
-        run: |
-          docker pull --platform ${{ matrix.platform }} ${{ steps.test_image.outputs.image_ref }}
-
       - name: Output Docker Image Size for ${{ matrix.platform }}
         run: |
           size=$(docker images --format "table {{.Size}}" "${{ steps.test_image.outputs.image_ref }}" | tail -n +2)
@@ -271,6 +266,45 @@ jobs:
           ignore-unfixed: true
           vuln-type: "os,library"
           severity: "CRITICAL,HIGH,MEDIUM"
+
+      # Push image only after all tests and security scans pass
+      - name: Push Docker Image for ${{ matrix.platform }}
+        id: push
+        if: github.event_name == 'push' && github.ref_type == 'tag'
+        uses: docker/build-push-action@v6
+        with:
+          file: Dockerfile.${{ needs.generate-matrix.outputs.image-base-name }}
+          platforms: ${{ matrix.platform }}
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          provenance: mode=max
+          sbom: true
+          cache-from: type=gha,scope=${{ github.repository }}-${{ needs.generate-matrix.outputs.image-base-name }}
+
+      - name: Install cosign
+        if: github.event_name == 'push' && github.ref_type == 'tag'
+        uses: sigstore/cosign-installer@v3
+
+      - name: Sign container image with cosign
+        if: github.event_name == 'push' && github.ref_type == 'tag'
+        env:
+          DIGEST: ${{ steps.push.outputs.digest }}
+          TAGS: ${{ steps.meta.outputs.tags }}
+        run: |
+          images=""
+          for tag in ${TAGS}; do
+            images+="${tag}@${DIGEST} "
+          done
+          cosign sign --yes ${images}
+
+      - name: Generate artifact attestation
+        if: github.event_name == 'push' && github.ref_type == 'tag'
+        uses: actions/attest-build-provenance@v2
+        with:
+          subject-name: ${{ env.REGISTRY }}/${{ github.repository }}/${{ steps.context.outputs.image-name }}
+          subject-digest: ${{ steps.push.outputs.digest }}
+          push-to-registry: true
 
       - name: Extract language versions
         id: extract_versions
