@@ -202,6 +202,30 @@ jobs:
           cache-from: type=gha,scope=${{ github.repository }}-${{ needs.generate-matrix.outputs.image-base-name }}
           cache-to: type=gha,mode=max,scope=${{ github.repository }}-${{ needs.generate-matrix.outputs.image-base-name }}
 
+      - name: Install cosign
+        if: github.event_name == 'push' && github.ref_type == 'tag'
+        uses: sigstore/cosign-installer@v3
+
+      - name: Sign container image with cosign
+        if: github.event_name == 'push' && github.ref_type == 'tag'
+        env:
+          DIGEST: ${{ steps.build.outputs.digest }}
+          TAGS: ${{ steps.meta.outputs.tags }}
+        run: |
+          images=""
+          for tag in ${TAGS}; do
+            images+="${tag}@${DIGEST} "
+          done
+          cosign sign --yes ${images}
+
+      - name: Generate artifact attestation
+        if: github.event_name == 'push' && github.ref_type == 'tag'
+        uses: actions/attest-build-provenance@v3
+        with:
+          subject-name: ${{ env.REGISTRY }}/${{ github.repository }}/${{ steps.context.outputs.image-name }}
+          subject-digest: ${{ steps.build.outputs.digest }}
+          push-to-registry: true
+
       - name: Set test image reference
         id: test_image
         run: |
