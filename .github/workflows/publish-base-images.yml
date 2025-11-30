@@ -319,7 +319,7 @@ jobs:
           platform: linux/amd64
 
       - name: Download artifacts
-        uses: actions/download-artifact@v5
+        uses: actions/download-artifact@v6
         continue-on-error: true
         with:
           path: artifacts/
