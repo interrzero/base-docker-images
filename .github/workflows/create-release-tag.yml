@@ -20,7 +20,7 @@ jobs:
       has_changes: ${{ steps.build_matrix.outputs.has_changes }}
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v6
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
         with:
           token: "${{ secrets.PAT_TOKEN }}"
           fetch-depth: 0
@@ -82,7 +82,7 @@ jobs:
         image_name: ${{ fromJSON(needs.detect_changed_images.outputs.images_matrix) }}
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v6
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
         with:
           token: "${{ secrets.GITHUB_TOKEN }}"
           fetch-depth: 0
@@ -112,7 +112,7 @@ jobs:
 
       - name: Calculate next version
         id: next_version
-        uses: "WyriHaximus/github-action-next-semvers@v1"
+        uses: "WyriHaximus/github-action-next-semvers@1b773ddb3831644dabc80ef5e791ebd4925f7651" # v1
         with:
           version: ${{ steps.latest_tag.outputs.current_semver }}
 
