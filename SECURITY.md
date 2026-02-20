@@ -1,4 +1,4 @@
-# Security Policies for Open Source Repos by Aquia
+# Security Policies for Open Source Repos by GDS
 
 1. [Overview](#overview)
 2. [Security Vulnerability Reporting](#security-vulnerability-reporting)
@@ -8,11 +8,11 @@
 
 ## Overview
 
-We are grateful for every contributor to our repositories and want to maintain security standards that reflect an awareness of the space in which we participate.  To value the time, safety, and security of our code bases, please adhere to the following security practices. This document outlines the processes that govern repositories created, maintained, and owned by Aquia.
+We are grateful for every contributor to our repositories and want to maintain security standards that reflect an awareness of the space in which we participate.  To value the time, safety, and security of our code bases, please adhere to the following security practices. This document outlines the processes that govern repositories created, maintained, and owned by GDS.
 
 ## Security Vulnerability Reporting
 
-If you would like to report a vulnerability in this or any Aquia-maintained repositories or have security concerns, please email [oss-security@aquia.us](mailto:oss-security@aquia.us). Please _*do not*_ create a GitHub issue with the matching report.
+If you would like to report a vulnerability in this or any GDS-maintained repositories or have security concerns, please email [code@devopsified.com](mailto:code@devopsified.com). Please _*do not*_ create a GitHub issue with the matching report.
 
 In order for us to best respond to your report, please include any of the following:
 
@@ -30,7 +30,7 @@ We ask that vulnerability reporter(s) act in good faith by not disclosing the is
 As the security issue moves through triage, identification, and release the reporter of the security vulnerability will be notified. Additional questions about the vulnerability may also be asked of the reporter.
 
 ## Disclosures
-Vulnerability disclosures are published as blog posts on the [Aquia Blog](https://blog.aquia.us/). The disclosures will contain an overview, details about the vulnerability, a fix for the vulnerability that will typically be an update, and optionally a workaround if one is available.
+Vulnerability disclosures are published as blog posts on the [GDS Blog](https://blog.aquia.us/). The disclosures will contain an overview, details about the vulnerability, a fix for the vulnerability that will typically be an update, and optionally a workaround if one is available.
 
 We follow [GitHub](https://docs.github.com/en/code-security/security-advisories/guidance-on-reporting-and-writing/about-coordinated-disclosure-of-security-vulnerabilities#standard-process)'s standard process for disclosing vulnerabilities in the industry.
 
