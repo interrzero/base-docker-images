@@ -216,7 +216,15 @@ jobs:
           size=$(docker images --format "table {{.Size}}" "${{ steps.test_image.outputs.image_ref }}" | tail -n +2)
           echo "Docker image size for ${{ matrix.platform }}: $size"
 
-      - name: Run container structure tests
+      - name: Cache container-structure-test
+        id: cst-cache
+        uses: actions/cache@v4
+        with:
+          path: /usr/local/bin/container-structure-test
+          key: cst-${{ runner.os }}-latest
+
+      - name: Install container-structure-test
+        if: steps.cst-cache.outputs.cache-hit != 'true'
         run: |
           curl -LO https://storage.googleapis.com/container-structure-test/latest/container-structure-test-linux-amd64
           chmod +x container-structure-test-linux-amd64
