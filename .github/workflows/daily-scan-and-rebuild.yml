@@ -59,13 +59,9 @@ jobs:
 
       - name: Install Trivy scanner
         run: |
-          # Install Trivy for vulnerability scanning
-          sudo apt-get update
-          sudo apt-get install -y wget apt-transport-https gnupg lsb-release jq
-          wget -qO - https://aquasecurity.github.io/trivy-repo/deb/public.key | gpg --dearmor | sudo tee /usr/share/keyrings/trivy.gpg > /dev/null
-          echo "deb [signed-by=/usr/share/keyrings/trivy.gpg] https://aquasecurity.github.io/trivy-repo/deb $(lsb_release -sc) main" | sudo tee /etc/apt/sources.list.d/trivy.list > /dev/null
-          sudo apt-get update
-          sudo apt-get install -y trivy
+          # Install Trivy and jq for vulnerability scanning
+          sudo apt-get update && sudo apt-get install -y jq
+          curl -sfL https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/install.sh | sh -s -- -b /usr/local/bin
 
       - name: Scan images and determine rebuild requirements
         id: scan_check_rebuild
