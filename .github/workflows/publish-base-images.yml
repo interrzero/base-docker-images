@@ -233,7 +233,7 @@ jobs:
           fi
 
       - name: Run Trivy vulnerability scanner for ${{ matrix.platform }}
-        uses: aquasecurity/trivy-action@b6643a29fecd7f34b3597bc6acb0a98b03d33ff8
+        uses: aquasecurity/trivy-action@c1824fd6edce30d7ab345a9989de00bbd46ef284
         with:
           scan-type: image
           image-ref: ${{ steps.test_image.outputs.image_ref }}
@@ -293,7 +293,7 @@ jobs:
 
       - name: Upload versions artifact for ${{ matrix.platform }}
         if: steps.extract_versions.outputs.extraction-success == 'true' && github.event_name == 'push' && github.ref_type == 'tag'
-        uses: actions/upload-artifact@v5
+        uses: actions/upload-artifact@v6
         with:
           name: versions-file-${{ steps.context.outputs.platform-suffix }}
           path: ${{ steps.extract_versions.outputs.versions-file }}
@@ -319,7 +319,7 @@ jobs:
           platform: linux/amd64
 
       - name: Download artifacts
-        uses: actions/download-artifact@v6
+        uses: actions/download-artifact@v7
         continue-on-error: true
         with:
           path: artifacts/
