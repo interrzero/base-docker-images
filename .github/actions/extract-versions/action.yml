@@ -42,7 +42,7 @@ runs:
         echo "Output file: $output_file"
 
         # Only extract versions for language-specific images
-        if [[ "$image_base_name" == "python-base" || "$image_base_name" == "nodejs-base" || "$image_base_name" == "openjdk17-base" || "$image_base_name" == "go-base" ]]; then
+        if [[ "$image_base_name" == "python-3.13-base" || "$image_base_name" == "nodejs-24-base" || "$image_base_name" == "openjdk-17-base" || "$image_base_name" == "go-1.25-base" ]]; then
             echo "Attempting to extract versions from $test_tag for $image_base_name"
             
             # Extract versions from the container

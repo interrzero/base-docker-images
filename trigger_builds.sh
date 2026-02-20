@@ -113,7 +113,7 @@ main() {
   git fetch origin --tags >/dev/null 2>&1
   
   # List all available images
-  images=(fips-base go-base nginx-base nodejs-base python-base wolfi-base openjdk17-base)
+  images=(fips-base go-1.25-base nginx-base nodejs-24-base python-3.13-base wolfi-base openjdk-17-base)
   modified_images=()
   
   echo "INFO: Checking for modified Dockerfiles..."
