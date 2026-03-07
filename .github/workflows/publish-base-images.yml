@@ -188,7 +188,7 @@ jobs:
 
       - name: Build Docker Image for ${{ matrix.platform }}
         id: build
-        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6
+        uses: docker/build-push-action@d08e5c354a6adb9ed34480a06d141179aa583294 # v7
         with:
           pull: true
           file: Dockerfile.${{ needs.generate-matrix.outputs.image-base-name }}
@@ -255,7 +255,7 @@ jobs:
       - name: Push Docker Image for ${{ matrix.platform }}
         id: push
         if: github.event_name == 'push' && github.ref_type == 'tag'
-        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6
+        uses: docker/build-push-action@d08e5c354a6adb9ed34480a06d141179aa583294 # v7
         with:
           file: Dockerfile.${{ needs.generate-matrix.outputs.image-base-name }}
           platforms: ${{ matrix.platform }}
