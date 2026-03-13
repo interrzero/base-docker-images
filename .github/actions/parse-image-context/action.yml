@@ -30,6 +30,15 @@ outputs:
   is-release-tag:
     description: 'true if this is a release tag, false otherwise'
     value: ${{ steps.parse.outputs.is_release_tag }}
+  has-version-tags:
+    description: 'true if major/minor version tags could be extracted'
+    value: ${{ steps.parse.outputs.has_version_tags }}
+  major-tag:
+    description: 'Major version tag (e.g., v1)'
+    value: ${{ steps.parse.outputs.major_tag }}
+  minor-tag:
+    description: 'Minor version tag (e.g., v1.1)'
+    value: ${{ steps.parse.outputs.minor_tag }}
 
 runs:
   using: 'composite'
@@ -40,18 +49,18 @@ runs:
       run: |
         tag_to_parse="${{ inputs.tag }}"
         platform="${{ inputs.platform }}"
-        
+
         echo "Input TAG: $tag_to_parse"
         echo "Input PLATFORM: $platform"
-        
+
         # Sanitize platform name for use in image names
         platform_suffix=$(echo "$platform" | tr '/' '-')
-        echo "platform_suffix=$platform_suffix" >> $GITHUB_OUTPUT
-        
+        echo "platform_suffix=$platform_suffix" >> "$GITHUB_OUTPUT"
+
         # Strip refs/tags/ prefix if present
         tag_clean=$(echo "$tag_to_parse" | sed 's|^refs/tags/||')
         echo "Cleaned TAG: $tag_clean"
-        
+
         # Check if it matches release/<image-name>/v<version> format
         if [[ $tag_clean =~ ^release/([^/]+)/(v.+)$ ]]; then
             echo "Match found (Release Tag format)"
@@ -59,27 +68,44 @@ runs:
             version="${BASH_REMATCH[2]}"
             version_no_build=$(echo "$version" | sed 's/\+.*//')
             is_release_tag="true"
-            
-            echo "image_base_name=$image_base_name" >> $GITHUB_OUTPUT
-            echo "version=$version" >> $GITHUB_OUTPUT
-            echo "version_no_build=$version_no_build" >> $GITHUB_OUTPUT
-            echo "is_release_tag=$is_release_tag" >> $GITHUB_OUTPUT
-            echo "Parsed: image_base_name=$image_base_name, version=$version"
+
+            # Extract major/minor version tags from semver (e.g., v1.1.108 → v1, v1.1)
+            if [[ $version_no_build =~ ^v([0-9]+)\.([0-9]+)\. ]]; then
+                major_tag="v${BASH_REMATCH[1]}"
+                minor_tag="v${BASH_REMATCH[1]}.${BASH_REMATCH[2]}"
+                has_version_tags="true"
+            else
+                major_tag=""
+                minor_tag=""
+                has_version_tags="false"
+            fi
+
+            echo "image_base_name=$image_base_name" >> "$GITHUB_OUTPUT"
+            echo "version=$version" >> "$GITHUB_OUTPUT"
+            echo "version_no_build=$version_no_build" >> "$GITHUB_OUTPUT"
+            echo "is_release_tag=$is_release_tag" >> "$GITHUB_OUTPUT"
+            echo "has_version_tags=$has_version_tags" >> "$GITHUB_OUTPUT"
+            echo "major_tag=$major_tag" >> "$GITHUB_OUTPUT"
+            echo "minor_tag=$minor_tag" >> "$GITHUB_OUTPUT"
+            echo "Parsed: image_base_name=$image_base_name, version=$version, major=$major_tag, minor=$minor_tag"
         else
             # Not a release tag - use fallback
             echo "Not a release tag build. Using fallback values."
             image_base_name="${{ inputs.fallback-image }}"
             version="dev"
             is_release_tag="false"
-            
-            echo "image_base_name=$image_base_name" >> $GITHUB_OUTPUT
-            echo "version=$version" >> $GITHUB_OUTPUT
-            echo "version_no_build=$version" >> $GITHUB_OUTPUT
-            echo "is_release_tag=$is_release_tag" >> $GITHUB_OUTPUT
+
+            echo "image_base_name=$image_base_name" >> "$GITHUB_OUTPUT"
+            echo "version=$version" >> "$GITHUB_OUTPUT"
+            echo "version_no_build=$version" >> "$GITHUB_OUTPUT"
+            echo "is_release_tag=$is_release_tag" >> "$GITHUB_OUTPUT"
+            echo "has_version_tags=false" >> "$GITHUB_OUTPUT"
+            echo "major_tag=" >> "$GITHUB_OUTPUT"
+            echo "minor_tag=" >> "$GITHUB_OUTPUT"
             echo "Using fallback: image_base_name=$image_base_name, version=$version"
         fi
-        
+
         # Construct full platform-specific image name
         image_name="${image_base_name}-${platform_suffix}"
-        echo "image_name=$image_name" >> $GITHUB_OUTPUT
+        echo "image_name=$image_name" >> "$GITHUB_OUTPUT"
         echo "Constructed image name: $image_name"

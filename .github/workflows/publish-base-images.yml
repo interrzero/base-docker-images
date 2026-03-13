@@ -31,27 +31,27 @@ jobs:
         id: set-tag
         run: |
           if [ "${{ github.event_name }}" == "pull_request" ]; then
-            modified_dockerfile=$(git diff --name-only ${{ github.event.pull_request.base.sha }} ${{ github.sha }} | grep "^Dockerfile\\." | head -n 1)
+            modified_dockerfile=$(git diff --name-only "${{ github.event.pull_request.base.sha }}" "${{ github.sha }}" | grep "^Dockerfile\\." | head -n 1)
             if [ -n "$modified_dockerfile" ]; then
-              detected_image=$(echo "$modified_dockerfile" | sed 's/^Dockerfile\.//')
+              detected_image="${modified_dockerfile#Dockerfile.}"
               if [[ "$detected_image" == "go-base" || "$detected_image" == "nodejs-base" || "$detected_image" == "python-base" ]]; then
                 echo "PR modifies a deprecated image ($detected_image). Halting build for this image."
-                echo "dockerfile_found=false" >> $GITHUB_OUTPUT
-                echo "tag=${{ github.ref }}" >> $GITHUB_OUTPUT
+                echo "dockerfile_found=false" >> "$GITHUB_OUTPUT"
+                echo "tag=${{ github.ref }}" >> "$GITHUB_OUTPUT"
               else
                 detected_tag="release/${detected_image}/v0.0.0-pr"
-                echo "dockerfile_found=true" >> $GITHUB_OUTPUT
-                echo "tag=$detected_tag" >> $GITHUB_OUTPUT
+                echo "dockerfile_found=true" >> "$GITHUB_OUTPUT"
+                echo "tag=$detected_tag" >> "$GITHUB_OUTPUT"
                 echo "Detected image from PR: $detected_image, using tag: $detected_tag"
               fi
             else
-              echo "dockerfile_found=false" >> $GITHUB_OUTPUT
-              echo "tag=${{ github.ref }}" >> $GITHUB_OUTPUT
+              echo "dockerfile_found=false" >> "$GITHUB_OUTPUT"
+              echo "tag=${{ github.ref }}" >> "$GITHUB_OUTPUT"
               echo "No Dockerfile changes detected in PR, will exit early"
             fi
           else
-            echo "dockerfile_found=true" >> $GITHUB_OUTPUT
-            echo "tag=${{ github.ref }}" >> $GITHUB_OUTPUT
+            echo "dockerfile_found=true" >> "$GITHUB_OUTPUT"
+            echo "tag=${{ github.ref }}" >> "$GITHUB_OUTPUT"
           fi
 
       - name: Parse image context
@@ -66,9 +66,9 @@ jobs:
         run: |
            if [ "${{ steps.context.outputs.image-base-name }}" == "__UNDEFINED__" ]; then
              echo "Deprecated or invalid image detected for tag ${{ steps.set-tag.outputs.tag }}. Skipping build."
-             echo "is_deprecated=true" >> $GITHUB_OUTPUT
+             echo "is_deprecated=true" >> "$GITHUB_OUTPUT"
            else
-             echo "is_deprecated=false" >> $GITHUB_OUTPUT
+             echo "is_deprecated=false" >> "$GITHUB_OUTPUT"
            fi
 
   publish_image:
@@ -76,7 +76,10 @@ jobs:
     if: needs.generate-matrix.outputs.is_deprecated != 'true'
     runs-on: ubuntu-latest
     outputs:
-      version: ${{ steps.context.outputs.version }}
+      version: ${{ steps.context.outputs.version-no-build }}
+      has-version-tags: ${{ steps.context.outputs.has-version-tags }}
+      major-tag: ${{ steps.context.outputs.major-tag }}
+      minor-tag: ${{ steps.context.outputs.minor-tag }}
     env:
       GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       TAG: ${{ needs.generate-matrix.outputs.tag }}
@@ -109,9 +112,9 @@ jobs:
         run: |
           dockerfile_path="Dockerfile.${{ needs.generate-matrix.outputs.image-base-name }}"
           if [ -f "$dockerfile_path" ]; then
-            echo "dockerfile_exists=true" >> $GITHUB_OUTPUT
+            echo "dockerfile_exists=true" >> "$GITHUB_OUTPUT"
           else
-            echo "dockerfile_exists=false" >> $GITHUB_OUTPUT
+            echo "dockerfile_exists=false" >> "$GITHUB_OUTPUT"
           fi
 
       - name: Exit early if Dockerfile does not exist
@@ -124,19 +127,19 @@ jobs:
         id: dockerfile_check
         run: |
           if [[ "${{ github.event_name }}" != "push" || "${{ github.ref_type }}" != "tag" ]]; then
-            echo "dockerfile_changed=true" >> $GITHUB_OUTPUT
+            echo "dockerfile_changed=true" >> "$GITHUB_OUTPUT"
             exit 0
           fi
           dockerfile_path="Dockerfile.${{ needs.generate-matrix.outputs.image-base-name }}"
-          prev_tag=$(git tag -l "release/${{ needs.generate-matrix.outputs.image-base-name }}/v*" --sort=-version:refname | head -n 2 | tail -n 1)
+          prev_tag=$(git tag -l "release/${{ needs.generate-matrix.outputs.image-base-name }}/v*" --sort=-version:refname | sed -n '2p')
           if [ -n "$prev_tag" ]; then
             if git diff --name-only "$prev_tag" HEAD | grep -q "^${dockerfile_path}$"; then
-              echo "dockerfile_changed=true" >> $GITHUB_OUTPUT
+              echo "dockerfile_changed=true" >> "$GITHUB_OUTPUT"
             else
-              echo "dockerfile_changed=false" >> $GITHUB_OUTPUT
+              echo "dockerfile_changed=false" >> "$GITHUB_OUTPUT"
             fi
           else
-            echo "dockerfile_changed=true" >> $GITHUB_OUTPUT
+            echo "dockerfile_changed=true" >> "$GITHUB_OUTPUT"
           fi
 
       - name: Exit early if Dockerfile unchanged
@@ -150,11 +153,11 @@ jobs:
         id: image_exists
         run: |
           image_name="${{ env.REGISTRY }}/${{ github.repository }}/${{ steps.context.outputs.image-name }}"
-          tag="${{ steps.context.outputs.version }}"
+          tag="${{ steps.context.outputs.version-no-build }}"
           if docker manifest inspect "$image_name:$tag" >/dev/null 2>&1; then
-            echo "image_exists=true" >> $GITHUB_OUTPUT
+            echo "image_exists=true" >> "$GITHUB_OUTPUT"
           else
-            echo "image_exists=false" >> $GITHUB_OUTPUT
+            echo "image_exists=false" >> "$GITHUB_OUTPUT"
           fi
 
       - name: Exit early if image already published
@@ -177,14 +180,14 @@ jobs:
         with:
           images: ${{ env.REGISTRY }}/${{ github.repository }}/${{ steps.context.outputs.image-name }}
           tags: |
-            type=raw,value=${{ steps.context.outputs.version }},enable=${{ github.ref_type == 'tag' }}
+            type=raw,value=${{ steps.context.outputs.version-no-build }},enable=${{ github.ref_type == 'tag' }}
             type=raw,value=latest,enable=${{ github.ref_type == 'tag' }}
             type=raw,value=test,enable=${{ github.event_name == 'pull_request' }}
           labels: |
             org.opencontainers.image.title=${{ steps.context.outputs.image-name }}
             org.opencontainers.image.description=Hardened base image for ${{ needs.generate-matrix.outputs.image-base-name }}
             org.opencontainers.image.vendor=InterruptZero.io
-            org.opencontainers.image.version=${{ steps.context.outputs.version }}
+            org.opencontainers.image.version=${{ steps.context.outputs.version-no-build }}
 
       - name: Build Docker Image for ${{ matrix.platform }}
         id: build
@@ -206,9 +209,9 @@ jobs:
         id: test_image
         run: |
           if [ "${{ github.event_name }}" == "pull_request" ]; then
-            echo "image_ref=${{ env.REGISTRY }}/${{ github.repository }}/${{ steps.context.outputs.image-name }}:test" >> $GITHUB_OUTPUT
+            echo "image_ref=${{ env.REGISTRY }}/${{ github.repository }}/${{ steps.context.outputs.image-name }}:test" >> "$GITHUB_OUTPUT"
           else
-            echo "image_ref=${{ env.REGISTRY }}/${{ github.repository }}/${{ steps.context.outputs.image-name }}:${{ steps.context.outputs.version }}" >> $GITHUB_OUTPUT
+            echo "image_ref=${{ env.REGISTRY }}/${{ github.repository }}/${{ steps.context.outputs.image-name }}:${{ steps.context.outputs.version-no-build }}" >> "$GITHUB_OUTPUT"
           fi
 
       - name: Output Docker Image Size for ${{ matrix.platform }}
@@ -280,6 +283,7 @@ jobs:
           for tag in ${TAGS}; do
             images+="${tag}@${DIGEST} "
           done
+          # shellcheck disable=SC2086
           cosign sign --yes ${images}
 
       - name: Generate artifact attestation
@@ -415,9 +419,11 @@ jobs:
 
           body_content=$(<"$RELEASE_BODY_FILE")
           echo "Setting BODY_TEXT environment variable..."
-          echo "BODY_TEXT<<EOF" >> $GITHUB_ENV
-          echo "$body_content" >> $GITHUB_ENV
-          echo "EOF" >> $GITHUB_ENV
+          {
+            echo "BODY_TEXT<<EOF"
+            echo "$body_content"
+            echo "EOF"
+          } >> "$GITHUB_ENV"
 
           rm -f "$RELEASE_BODY_FILE" # Clean up temporary file
 
@@ -454,38 +460,38 @@ jobs:
           image_base_name="${{ needs.generate-matrix.outputs.image-base-name }}"
           version="${{ needs.publish_image.outputs.version }}"
           registry="${{ env.REGISTRY }}/${{ github.repository }}"
-          
+
           echo "Creating multi-arch manifests for $image_base_name"
-          
+
           # Base images for manifest creation
           amd64_image="$registry/$image_base_name-linux-amd64"
           arm64_image="$registry/$image_base_name-linux-arm64"
           universal_image="$registry/$image_base_name"
-          
+
           echo "Checking if source images exist:"
           echo "AMD64: $amd64_image:$version"
           docker manifest inspect "$amd64_image:$version" >/dev/null && echo "✅ AMD64 image exists" || echo "❌ AMD64 image missing"
           echo "ARM64: $arm64_image:$version"
           docker manifest inspect "$arm64_image:$version" >/dev/null && echo "✅ ARM64 image exists" || echo "❌ ARM64 image missing"
-          
+
           echo "AMD64: $amd64_image:latest"
           docker manifest inspect "$amd64_image:latest" >/dev/null && echo "✅ AMD64 latest exists" || echo "❌ AMD64 latest missing"
           echo "ARM64: $arm64_image:latest"
           docker manifest inspect "$arm64_image:latest" >/dev/null && echo "✅ ARM64 latest exists" || echo "❌ ARM64 latest missing"
-          
+
           # Get digests for specific platforms
           echo "Getting platform-specific digests..."
           amd64_digest=$(docker manifest inspect "$amd64_image:$version" | jq -r '.manifests[] | select(.platform.architecture=="amd64") | .digest')
           arm64_digest=$(docker manifest inspect "$arm64_image:$version" | jq -r '.manifests[] | select(.platform.architecture=="arm64") | .digest')
-          
+
           amd64_latest_digest=$(docker manifest inspect "$amd64_image:latest" | jq -r '.manifests[] | select(.platform.architecture=="amd64") | .digest')
           arm64_latest_digest=$(docker manifest inspect "$arm64_image:latest" | jq -r '.manifests[] | select(.platform.architecture=="arm64") | .digest')
-          
+
           echo "AMD64 version digest: $amd64_digest"
           echo "ARM64 version digest: $arm64_digest"
           echo "AMD64 latest digest: $amd64_latest_digest"
           echo "ARM64 latest digest: $arm64_latest_digest"
-          
+
           # Create unified manifest for semver version using digests
           echo "Creating manifest for $universal_image:$version"
           docker manifest create "$universal_image:$version" \
@@ -495,7 +501,7 @@ jobs:
             "$amd64_image@$amd64_digest" \
             "$arm64_image@$arm64_digest"
           docker manifest push "$universal_image:$version"
-          
+
           # Create unified manifest for latest using digests
           echo "Creating manifest for $universal_image:latest"
           docker manifest create "$universal_image:latest" \
@@ -505,18 +511,18 @@ jobs:
             "$amd64_image@$amd64_latest_digest" \
             "$arm64_image@$arm64_latest_digest"
           docker manifest push "$universal_image:latest"
-          
+
           # Create version-specific manifests if available
-          if [[ "${{ needs.publish_image.outputs.version_tags.has_version_tags }}" == "true" ]]; then
-            major_tag="${{ needs.publish_image.outputs.version_tags.major_tag }}"
-            minor_tag="${{ needs.publish_image.outputs.version_tags.minor_tag }}"
-            
+          if [[ "${{ needs.publish_image.outputs.has-version-tags }}" == "true" ]]; then
+            major_tag="${{ needs.publish_image.outputs.major-tag }}"
+            minor_tag="${{ needs.publish_image.outputs.minor-tag }}"
+
             if [[ -n "$major_tag" ]]; then
               echo "Creating manifest for $universal_image:$major_tag"
               # Get digests for major tag
               major_amd64_digest=$(docker manifest inspect "$amd64_image:$major_tag" | jq -r '.manifests[] | select(.platform.architecture=="amd64") | .digest')
               major_arm64_digest=$(docker manifest inspect "$arm64_image:$major_tag" | jq -r '.manifests[] | select(.platform.architecture=="arm64") | .digest')
-              
+
               docker manifest create "$universal_image:$major_tag" \
                 "$amd64_image@$major_amd64_digest" \
                 "$arm64_image@$major_arm64_digest" || \
@@ -525,13 +531,13 @@ jobs:
                 "$arm64_image@$major_arm64_digest"
               docker manifest push "$universal_image:$major_tag"
             fi
-            
+
             if [[ -n "$minor_tag" ]]; then
               echo "Creating manifest for $universal_image:$minor_tag"
-              # Get digests for minor tag  
+              # Get digests for minor tag
               minor_amd64_digest=$(docker manifest inspect "$amd64_image:$minor_tag" | jq -r '.manifests[] | select(.platform.architecture=="amd64") | .digest')
               minor_arm64_digest=$(docker manifest inspect "$arm64_image:$minor_tag" | jq -r '.manifests[] | select(.platform.architecture=="arm64") | .digest')
-              
+
               docker manifest create "$universal_image:$minor_tag" \
                 "$amd64_image@$minor_amd64_digest" \
                 "$arm64_image@$minor_arm64_digest" || \
@@ -541,7 +547,7 @@ jobs:
               docker manifest push "$universal_image:$minor_tag"
             fi
           fi
-          
+
           echo "✅ Multi-arch manifests created successfully"
 
       - name: Verify multi-arch manifests
@@ -550,20 +556,20 @@ jobs:
           version="${{ needs.publish_image.outputs.version }}"
           registry="${{ env.REGISTRY }}/${{ github.repository }}"
           universal_image="$registry/$image_base_name"
-          
+
           echo "Verifying multi-arch manifests:"
-          
+
           # Verify semver and latest tags
           for tag in "$version" "latest"; do
             echo "Checking $universal_image:$tag"
             docker manifest inspect "$universal_image:$tag" | jq '.manifests[].platform'
           done
-          
+
           # Verify version tags if they exist
-          if [[ "${{ needs.publish_image.outputs.version_tags.has_version_tags }}" == "true" ]]; then
-            major_tag="${{ needs.publish_image.outputs.version_tags.major_tag }}"
-            minor_tag="${{ needs.publish_image.outputs.version_tags.minor_tag }}"
-            
+          if [[ "${{ needs.publish_image.outputs.has-version-tags }}" == "true" ]]; then
+            major_tag="${{ needs.publish_image.outputs.major-tag }}"
+            minor_tag="${{ needs.publish_image.outputs.minor-tag }}"
+
             for tag in "$major_tag" "$minor_tag"; do
               if [[ -n "$tag" ]]; then
                 echo "Checking $universal_image:$tag"
