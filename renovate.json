@@ -12,6 +12,7 @@
   "automergeType": "pr",
   "automergeStrategy": "squash",
   "platformAutomerge": true,
+  "rebaseWhen": "behind-base-branch",
   "dependencyDashboard": true,
   "dependencyDashboardAutoclose": true,
   "schedule": [
