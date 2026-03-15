@@ -1,0 +1,4 @@
+# All files require @devopsmatt review
+# Renovate auto-merges digest/patch Dockerfile updates via platformAutomerge
+# Major/minor updates require manual sign-off
+* @devopsmatt
