@@ -43,13 +43,13 @@ jobs:
       - name: Discover available base images
         id: discover_images
         run: |
-          BASE_NAMES=$(find . -maxdepth 1 -name 'Dockerfile.*' -type f -printf '%f\n' | sed 's/^Dockerfile\.//' | sort -u | paste -sd ' ')
+          BASE_NAMES=$(find . -maxdepth 1 -name 'Dockerfile.*' -type f -printf '%f\n' | while IFS= read -r f; do echo "${f#Dockerfile.}"; done | sort -u | paste -sd ' ')
           if [ -z "$BASE_NAMES" ]; then
             echo "::error::No Dockerfiles found matching 'Dockerfile.*'"
             exit 1
           fi
           echo "Discovered image base names: $BASE_NAMES"
-          echo "IMAGE_BASE_NAMES=$BASE_NAMES" >> $GITHUB_ENV
+          echo "IMAGE_BASE_NAMES=${BASE_NAMES}" >> "$GITHUB_ENV"
 
       - name: Setup Docker environment
         uses: ./.github/actions/setup-docker
@@ -72,14 +72,15 @@ jobs:
           dockerfile_has_changed() {
             local image=$1
             local dockerfile="Dockerfile.$image"
-            local latest_tag=$(git for-each-ref --sort='-v:refname' --format '%(refname:short)' refs/tags/release/$image | head -n 1)
+            local latest_tag
+            latest_tag=$(git for-each-ref --sort='-v:refname' --format '%(refname:short)' "refs/tags/release/$image" | head -n 1)
 
             if [ -z "$latest_tag" ]; then
               # No previous tag, so it has definitely "changed"
               return 0
             fi
 
-            if ! git diff --quiet $latest_tag HEAD -- "$dockerfile"; then
+            if ! git diff --quiet "$latest_tag" HEAD -- "$dockerfile"; then
               # The file has changed
               return 0
             else
@@ -118,7 +119,7 @@ jobs:
               if trivy image \
                 --ignore-unfixed \
                 --exit-code 1 \
-                --severity ${{ env.TRIGGER_SEVERITIES }} \
+                --severity "${{ env.TRIGGER_SEVERITIES }}" \
                 --format table \
                 "$full_image_tag"; then
                 echo "✅ No fixable vulnerabilities found in $full_image_tag"
@@ -202,13 +203,13 @@ jobs:
 
           if [ -z "$unique_needs_rebuild" ]; then
             echo "✅ No images require rebuilding based on vulnerability scans and base image freshness checks."
-            echo "triggered_rebuilds=false" >> $GITHUB_OUTPUT
+            echo "triggered_rebuilds=false" >> "$GITHUB_OUTPUT"
             exit 0
           fi
 
           echo "🚀 Triggering rebuilds for: $unique_needs_rebuild"
-          echo "triggered_rebuilds=true" >> $GITHUB_OUTPUT
-          echo "rebuild_list=$unique_needs_rebuild" >> $GITHUB_OUTPUT
+          echo "triggered_rebuilds=true" >> "$GITHUB_OUTPUT"
+          echo "rebuild_list=$unique_needs_rebuild" >> "$GITHUB_OUTPUT"
 
           # Configure git for creating tags
           git config user.name "github-actions[bot]"
@@ -240,8 +241,8 @@ jobs:
 
               if [ "$hours_since_last_release" -lt "$cooldown_hours" ]; then
                 echo "⏸️  Skipping $base_name: Within ${cooldown_hours}h cooldown period"
-                echo "   Last release: $(date -d @${tag_timestamp} 2>/dev/null || date -r ${tag_timestamp})"
-                echo "   Next eligible: $(date -d @$((tag_timestamp + cooldown_hours * 3600)) 2>/dev/null || date -r $((tag_timestamp + cooldown_hours * 3600)))"
+                echo "   Last release: $(date -d "@${tag_timestamp}" 2>/dev/null || date -r "${tag_timestamp}")"
+                echo "   Next eligible: $(date -d "@$((tag_timestamp + cooldown_hours * 3600))" 2>/dev/null || date -r "$((tag_timestamp + cooldown_hours * 3600))")"
                 continue
               else
                 echo "✅ $base_name passed cooldown check (${hours_since_last_release}h > ${cooldown_hours}h)"
@@ -251,7 +252,7 @@ jobs:
             fi
 
             # Extract version and create rebuild tag
-            version_part=$(echo "$latest_release_tag" | sed -n "s|release/${base_name}/\(v.*\)|\1|p")
+            version_part="${latest_release_tag#"release/${base_name}/"}"
             if [ -z "$version_part" ]; then
               echo "::error::Could not extract version part from tag '$latest_release_tag'. Skipping rebuild for $base_name."
               continue
@@ -259,7 +260,7 @@ jobs:
 
             # Create rebuild tag with timestamp
             timestamp=$(date +%Y%m%d%H%M%S)
-            version_part_no_build=$(echo "$version_part" | sed 's/\+.*//')
+            version_part_no_build="${version_part%%+*}"
             new_tag="release/${base_name}/${version_part_no_build}+rebuild.${timestamp}"
 
             echo "Creating and pushing rebuild tag: $new_tag"

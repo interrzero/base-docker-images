@@ -427,7 +427,6 @@ jobs:
 
           rm -f "$RELEASE_BODY_FILE" # Clean up temporary file
 
-
       - name: Create GitHub Release
         uses: softprops/action-gh-release@b25b93d384199fc0fc8c2e126b2d937a0cbeb2ae # v2
         with:
