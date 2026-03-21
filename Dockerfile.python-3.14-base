@@ -1,8 +1,8 @@
 FROM cgr.dev/chainguard/wolfi-base:latest@sha256:2a43204178a08b8c7f5e881c550bb52733364beff904ed36eeabe33cc656c749 AS builder
 
-RUN apk update && apk add --no-cache --upgrade python-3.13 py3.13-pip uv && \
-    ln -sf /usr/bin/python3.13 /usr/bin/python3 && \
-    ln -sf /usr/bin/python3.13 /usr/bin/python
+RUN apk update && apk add --no-cache --upgrade python-3.14 py3.14-pip uv && \
+    ln -sf /usr/bin/python3.14 /usr/bin/python3 && \
+    ln -sf /usr/bin/python3.14 /usr/bin/python
 
 # local install to /home/nonroot/.local/bin
 USER nonroot
@@ -22,7 +22,7 @@ RUN python3 --version 2>&1 | awk -F' ' '{print $2}' | tr -d '\n' | sed 's/\.[0-9
 PY_VERSION=$(cat /tmp/python_minor_version.txt) && \
 ln -s "/home/nonroot/.local/lib/python${PY_VERSION}" /home/nonroot/.local/lib/python3
 
-# save Python, pip, and Poetry versions
+# save Python, pip, Poetry, and uv versions
 RUN echo "python_major_tag=$(python3 --version 2>&1 | awk -F' ' '{split($2, a, "."); print a[1]}' | tr -d '\n')" > /tmp/versions.txt  && \
 echo "python_minor_tag=$(cat /tmp/python_minor_version.txt)" >> /tmp/versions.txt && \
 echo "python=$(python3 --version 2>&1 | awk -F' ' '{print $2}' | tr -d '\n')" >> /tmp/versions.txt && \
