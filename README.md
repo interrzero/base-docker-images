@@ -25,6 +25,8 @@ This repository is a work in progress, but the produced images are considered st
 
 [![Python 3.13 Base](https://img.shields.io/github/v/tag/interrzero/base-docker-images?filter=release/python-3.13-base/*&label=python-3.13-base&style=for-the-badge&logo=python&color=3776AB)](https://github.com/interrzero/base-docker-images/pkgs/container/base-docker-images%2Fpython-3.13-base)
 
+[![Python 3.14 Base](https://img.shields.io/github/v/tag/interrzero/base-docker-images?filter=release/python-3.14-base/*&label=python-3.14-base&style=for-the-badge&logo=python&color=3776AB)](https://github.com/interrzero/base-docker-images/pkgs/container/base-docker-images%2Fpython-3.14-base)
+
 [![Wolfi Base](https://img.shields.io/github/v/tag/interrzero/base-docker-images?filter=release/wolfi-base/*&label=wolfi-base&style=for-the-badge&logo=linux&color=FCC624)](https://github.com/interrzero/base-docker-images/pkgs/container/base-docker-images%2Fwolfi-base)
 
 ### Latest linux/amd64 Releases
@@ -35,6 +37,7 @@ This repository is a work in progress, but the produced images are considered st
 * [nodejs-24-base-linux-amd64](https://github.com/interrzero/base-docker-images/pkgs/container/base-docker-images%2Fnodejs-24-base-linux-amd64)
 * [openjdk-17-base-linux-amd64](https://github.com/interrzero/base-docker-images/pkgs/container/base-docker-images%2Fopenjdk-17-base-linux-amd64)
 * [python-3.13-base-linux-amd64](https://github.com/interrzero/base-docker-images/pkgs/container/base-docker-images%2Fpython-3.13-base-linux-amd64)
+* [python-3.14-base-linux-amd64](https://github.com/interrzero/base-docker-images/pkgs/container/base-docker-images%2Fpython-3.14-base-linux-amd64)
 * [wolfi-base-linux-amd64](https://github.com/interrzero/base-docker-images/pkgs/container/base-docker-images%2Fwolfi-base-linux-amd64)
 
 ### Latest linux/arm64 Releases
@@ -45,6 +48,7 @@ This repository is a work in progress, but the produced images are considered st
 * [nodejs-24-base-linux-arm64](https://github.com/interrzero/base-docker-images/pkgs/container/base-docker-images%2Fnodejs-24-base-linux-arm64)
 * [openjdk-17-base-linux-arm64](https://github.com/interrzero/base-docker-images/pkgs/container/base-docker-images%2Fopenjdk-17-base-linux-arm64)
 * [python-3.13-base-linux-arm64](https://github.com/interrzero/base-docker-images/pkgs/container/base-docker-images%2Fpython-3.13-base-linux-arm64)
+* [python-3.14-base-linux-arm64](https://github.com/interrzero/base-docker-images/pkgs/container/base-docker-images%2Fpython-3.14-base-linux-arm64)
 * [wolfi-base-linux-arm64](https://github.com/interrzero/base-docker-images/pkgs/container/base-docker-images%2Fwolfi-base-linux-arm64)
 
 ## Supply Chain Security
@@ -90,8 +94,7 @@ Images are considered hardened when they do not contain fixed CVE vulnerabilitie
 
 * **Go**: 1.25.x (from chainguard/go:latest)
 * **Node.js**: 24.6.x with npm 11.5.x (from wolfi-base with nodejs/npm packages)
-* **Python**: 3.13.x (from wolfi-base with python-3.13 package, pinned to avoid auto-upgrade to 3.14)
-  * **Note**: Python 3.14 support will be added once `py3.14-pip` becomes available in the Wolfi package repository
+* **Python**: 3.13.x and 3.14.x (from wolfi-base with python-3.13/python-3.14 packages, includes pip, poetry, uv)
 * **OpenJDK**: 17.x with Maven 3.9.8 (from wolfi-base with openjdk-17 package)
 * **Wolfi Base**: Latest minimal Linux distribution
 * **FIPS Base**: Custom OpenSSL 3.0.9 with FIPS validation ([beta](#beta-images))
