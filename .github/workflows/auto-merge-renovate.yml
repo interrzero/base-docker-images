@@ -71,6 +71,12 @@ jobs:
               return null;
             }
 
+            // Skip already merged or closed PRs
+            if (pr.state === 'closed' || pr.merged_at) {
+              console.log(`Skipping PR #${pr.number} - already ${pr.merged_at ? 'merged' : 'closed'}`);
+              return null;
+            }
+
             core.setOutput('number', pr.number);
             core.setOutput('title', pr.title);
             core.setOutput('mergeable_state', pr.mergeable_state);
