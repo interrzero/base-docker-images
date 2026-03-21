@@ -181,6 +181,8 @@ jobs:
           images: ${{ env.REGISTRY }}/${{ github.repository }}/${{ steps.context.outputs.image-name }}
           tags: |
             type=raw,value=${{ steps.context.outputs.version-no-build }},enable=${{ github.ref_type == 'tag' }}
+            type=raw,value=${{ steps.context.outputs.major-tag }},enable=${{ github.ref_type == 'tag' && steps.context.outputs.has-version-tags == 'true' }}
+            type=raw,value=${{ steps.context.outputs.minor-tag }},enable=${{ github.ref_type == 'tag' && steps.context.outputs.has-version-tags == 'true' }}
             type=raw,value=latest,enable=${{ github.ref_type == 'tag' }}
             type=raw,value=test,enable=${{ github.event_name == 'pull_request' }}
           labels: |
