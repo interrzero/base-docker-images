@@ -59,10 +59,13 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Install Trivy scanner
+        env:
+          TRIVY_VERSION: "0.69.3"
         run: |
-          # Install Trivy and jq for vulnerability scanning
+          # Install Trivy (pinned version) and jq for vulnerability scanning
           sudo apt-get update && sudo apt-get install -y jq
-          curl -sfL https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/install.sh | sh -s -- -b /usr/local/bin
+          curl -sfL https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/install.sh | sh -s -- -b /usr/local/bin "v${TRIVY_VERSION}"
+          trivy --version
 
       - name: Scan images and determine rebuild requirements
         id: scan_check_rebuild
