@@ -223,7 +223,7 @@ jobs:
 
       - name: Cache container-structure-test
         id: cst-cache
-        uses: actions/cache@v5
+        uses: actions/cache@a7833574556fa59680c1b7cb190c1735db73ebf0 # v5
         with:
           path: /usr/local/bin/container-structure-test
           key: cst-${{ runner.os }}-latest
@@ -246,7 +246,7 @@ jobs:
           fi
 
       - name: Run Trivy vulnerability scanner for ${{ matrix.platform }}
-        uses: aquasecurity/trivy-action@57a97c7e7821a5776cebc9bb87c984fa69cba8f1
+        uses: aquasecurity/trivy-action@57a97c7e7821a5776cebc9bb87c984fa69cba8f1 # v0.35.0 (post-incident fixed release)
         with:
           scan-type: image
           image-ref: ${{ steps.test_image.outputs.image_ref }}
