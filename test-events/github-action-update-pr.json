@@ -1,0 +1,30 @@
+{
+  "action": "opened",
+  "number": 1001,
+  "pull_request": {
+    "number": 1001,
+    "title": "Update docker/login-action action to v3.7.0",
+    "draft": false,
+    "mergeable": true,
+    "mergeable_state": "clean",
+    "state": "open",
+    "user": {
+      "login": "renovate[bot]",
+      "type": "Bot"
+    },
+    "head": {
+      "ref": "renovate/docker-login-action-3.x",
+      "sha": "update123"
+    },
+    "base": {
+      "ref": "main",
+      "sha": "def456abc789"
+    }
+  },
+  "repository": {
+    "name": "base-docker-images",
+    "owner": {
+      "login": "interrzero"
+    }
+  }
+}

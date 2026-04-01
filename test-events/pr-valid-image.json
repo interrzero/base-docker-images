@@ -1,0 +1,19 @@
+{
+  "pull_request": {
+    "number": 999,
+    "head": {
+      "ref": "test-branch",
+      "sha": "abc123def456"
+    },
+    "base": {
+      "ref": "main",
+      "sha": "5c52495"
+    }
+  },
+  "repository": {
+    "name": "base-docker-images",
+    "owner": {
+      "login": "interrzero"
+    }
+  }
+}

@@ -1,0 +1,22 @@
+{
+  "ref": "refs/heads/main",
+  "ref_type": "branch",
+  "pusher": {
+    "name": "test",
+    "email": "test@test.com"
+  },
+  "repository": {
+    "full_name": "interrzero/base-docker-images",
+    "name": "base-docker-images",
+    "owner": {
+      "login": "interrzero",
+      "name": "interrzero"
+    }
+  },
+  "files": [
+    {
+      "filename": "deprecated.Dockerfile.python-base",
+      "status": "removed"
+    }
+  ]
+}
