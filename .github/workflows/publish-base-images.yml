@@ -233,7 +233,7 @@ jobs:
 
       - name: Cache container-structure-test
         id: cst-cache
-        uses: actions/cache@a7833574556fa59680c1b7cb190c1735db73ebf0 # v5
+        uses: actions/cache@668228422ae6a00e4ad889ee87cd7109ec5666a7 # v5
         with:
           path: /usr/local/bin/container-structure-test
           key: cst-${{ runner.os }}-latest
