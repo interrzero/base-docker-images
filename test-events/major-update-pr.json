@@ -1,0 +1,30 @@
+{
+  "action": "opened",
+  "number": 1000,
+  "pull_request": {
+    "number": 1000,
+    "title": "Update Python to v4.0.0 (major)",
+    "draft": false,
+    "mergeable": true,
+    "mergeable_state": "clean",
+    "state": "open",
+    "user": {
+      "login": "renovate[bot]",
+      "type": "Bot"
+    },
+    "head": {
+      "ref": "renovate/python-4.x",
+      "sha": "xyz789abc123"
+    },
+    "base": {
+      "ref": "main",
+      "sha": "def456abc789"
+    }
+  },
+  "repository": {
+    "name": "base-docker-images",
+    "owner": {
+      "login": "interrzero"
+    }
+  }
+}

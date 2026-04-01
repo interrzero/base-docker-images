@@ -1,0 +1,14 @@
+{
+  "action": "workflow_dispatch",
+  "inputs": {
+    "images": "",
+    "force_all": true,
+    "reason": "Testing manual trigger"
+  },
+  "repository": {
+    "name": "base-docker-images",
+    "owner": {
+      "login": "interrzero"
+    }
+  }
+}
