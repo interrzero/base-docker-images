@@ -1,5 +1,6 @@
 FROM cgr.dev/chainguard/wolfi-base:latest@sha256:52e71f61c6afd1f8d2625cff4465d8ecee156668ca665f7e9c582d1cc914eb6a AS builder
 
+# CVE-2026-3644: requires python-3.13 >= 3.13.12-r7
 RUN apk update && apk add --no-cache --upgrade python-3.13 py3.13-pip uv && \
     ln -sf /usr/bin/python3.13 /usr/bin/python3 && \
     ln -sf /usr/bin/python3.13 /usr/bin/python
