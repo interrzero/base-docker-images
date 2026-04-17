@@ -24,21 +24,7 @@ jobs:
             github.com:443
 
       - name: Auto-approve Renovate PR
-        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9
-        with:
-          github-token: ${{ secrets.PAT_TOKEN }}
-          script: |
-            const { owner, repo } = context.repo;
-            const pull_number = context.payload.pull_request.number;
-
-            console.log(`Approving PR #${pull_number} from ${context.actor}`);
-
-            await github.rest.pulls.createReview({
-              owner,
-              repo,
-              pull_number,
-              event: 'APPROVE',
-              body: 'Auto-approved by workflow'
-            });
-
-            console.log(`✅ Successfully approved PR #${pull_number}`);
+        env:
+          GH_TOKEN: ${{ secrets.PAT_TOKEN }}
+          PR_URL: ${{ github.event.pull_request.html_url }}
+        run: gh pr review "$PR_URL" --approve --body "Auto-approved by workflow"
