@@ -8,8 +8,7 @@
 | **publish-base-images** | Release tag push or PR | Core pipeline: build, test, scan, push, sign, release, manifests |
 | **daily-scan-and-rebuild** | Daily cron / manual | Scans GHCR images with Trivy, triggers rebuilds if upstream base updated |
 | **manual-build-trigger** | GitHub UI dispatch | Manually trigger builds for specific or all images |
-| **auto-approve-renovate** | Renovate PR opened | Auto-approves Renovate PRs using PAT_TOKEN |
-| **auto-merge-renovate** | After publish/release completes, or GHA PR | Classifies update risk, enables GitHub auto-merge for safe updates |
+| **auto-approve-renovate** | Renovate PR opened | Auto-approves Renovate PRs using PAT_TOKEN (auto-merge handled natively by Renovate via `platformAutomerge`) |
 
 ## Flow Diagram
 
@@ -130,25 +129,18 @@ FLOW 3: RENOVATE AUTO-MANAGEMENT
 
   Renovate Bot opens/syncs PR
        |
-       +------------------------------------+
-       v                                    v
-  +-------------------------+   +--------------------------------------+
-  | AUTO-APPROVE            |   | AUTO-MERGE                            |
-  | auto-approve-           |   | auto-merge-renovate.yml               |
-  | renovate.yml            |   |                                       |
-  |                         |   | Triggers:                             |
-  | pull_request_target     |   | +- pull_request_target (GHA PRs)      |
-  | +- If actor is          |   | +- workflow_run (after Publish         |
-  | |  renovate[bot]        |   |    or Create Release completes)       |
-  | +- Approve PR via       |   |                                       |
-  |    PAT_TOKEN            |   | +- Find associated Renovate PR        |
-  +-------------------------+   | +- Classify update type:               |
-                                | |  +- Digest -> auto-merge             |
-                                | |  +- GH Actions -> auto-merge         |
-                                | |  +- Docker minor/patch -> merge       |
-                                | |  +- Major -> skip (manual review)     |
-                                | +- Enable GitHub auto-merge (squash)    |
-                                +----------------------------------------+
+       v
+  +-------------------------+
+  | AUTO-APPROVE            |   Auto-merge is handled natively by
+  | auto-approve-           |   Renovate via platformAutomerge in
+  | renovate.yml            |   renovate.json - no workflow needed.
+  |                         |
+  | pull_request_target     |   Update classification (digest/minor/
+  | +- If actor is          |   patch/major) is also configured in
+  | |  renovate[bot]        |   renovate.json packageRules.
+  | +- Approve PR via       |
+  |    PAT_TOKEN            |
+  +-------------------------+
 
 
 FLOW 4: DAILY VULNERABILITY SCAN & REBUILD
@@ -218,9 +210,9 @@ COMPOSITE ACTIONS (shared helpers)
 
 END-TO-END HAPPY PATH
 
-  Renovate PR -> Auto-Approve -> Merge to main -> Detect Changes -> Create Tag
+  Renovate PR -> Auto-Approve -> Renovate Auto-Merge -> Detect Changes -> Create Tag
        -> Build (amd64+arm64) -> Test -> Scan -> Push -> Sign -> Attest
-       -> GitHub Release -> Multi-arch Manifest -> Auto-Merge Renovate PR
+       -> GitHub Release -> Multi-arch Manifest
 
   Daily Scan -> Find Vulns + Outdated Base -> Rebuild Tag -> (same build pipeline)
 
