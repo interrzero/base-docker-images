@@ -12,7 +12,7 @@ We are grateful for every contributor to our repositories and want to maintain s
 
 ## Security Vulnerability Reporting
 
-If you would like to report a vulnerability in this or any GDS-maintained repositories or have security concerns, please email [code@devopsified.com](mailto:code@devopsified.com). Please _*do not*_ create a GitHub issue with the matching report.
+If you would like to report a vulnerability in this or any GDS-maintained repositories or have security concerns, please email [us](mailto:code@devopsified.com). Please _*do not*_ create a GitHub issue with the matching report.
 
 In order for us to best respond to your report, please include any of the following:
 
@@ -30,7 +30,6 @@ We ask that vulnerability reporter(s) act in good faith by not disclosing the is
 As the security issue moves through triage, identification, and release the reporter of the security vulnerability will be notified. Additional questions about the vulnerability may also be asked of the reporter.
 
 ## Disclosures
-Vulnerability disclosures are published as blog posts on the [GDS Blog](https://blog.aquia.us/). The disclosures will contain an overview, details about the vulnerability, a fix for the vulnerability that will typically be an update, and optionally a workaround if one is available.
 
 We follow [GitHub](https://docs.github.com/en/code-security/security-advisories/guidance-on-reporting-and-writing/about-coordinated-disclosure-of-security-vulnerabilities#standard-process)'s standard process for disclosing vulnerabilities in the industry.
 
