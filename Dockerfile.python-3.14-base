@@ -1,6 +1,8 @@
 FROM cgr.dev/chainguard/wolfi-base:latest@sha256:3258be472764337fd13095bcbb3182da170243b5819fd67ad4c0754590588b31 AS builder
 
-RUN apk update && apk add --no-cache --upgrade python-3.14 py3.14-pip uv && \
+# CVE-2026-5450/5928: glibc >= 2.43-r7 (forced via apk upgrade)
+RUN apk update && apk upgrade --no-cache && \
+    apk add --no-cache --upgrade python-3.14 py3.14-pip uv && \
     ln -sf /usr/bin/python3.14 /usr/bin/python3 && \
     ln -sf /usr/bin/python3.14 /usr/bin/python
 
