@@ -1,6 +1,7 @@
 FROM cgr.dev/chainguard/wolfi-base:latest@sha256:3258be472764337fd13095bcbb3182da170243b5819fd67ad4c0754590588b31
 
-RUN apk update && apk add --no-cache go-1.25 bash build-base git
+RUN apk update && apk upgrade --no-cache && \
+    apk add --no-cache go-1.25 bash build-base git
 
 USER nonroot
 WORKDIR /workspace
