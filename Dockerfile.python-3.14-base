@@ -1,4 +1,4 @@
-FROM cgr.dev/chainguard/wolfi-base:latest@sha256:2f7a5c164eafbdbe46fe1d91bd1ab4c8cb5c2bdbd10641c3d61bd39962384cdb AS builder
+FROM cgr.dev/chainguard/wolfi-base:latest@sha256:02dab76bd852a70556b5b2002195c8a5fdab77d323c433bf6642aab080489795 AS builder
 
 # CVE-2026-5450/5928: glibc >= 2.43-r7 (forced via apk upgrade)
 # CVE-2026-6357: temp PyPI pip 26.1+ in user dir; restore "py3.14-pip" when Wolfi bumps
