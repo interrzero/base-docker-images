@@ -1,6 +1,11 @@
 FROM cgr.dev/chainguard/wolfi-base:latest@sha256:003627df3c1e1bba0c4116afcddb314aca9594ee2328c7e876a8081a6c988b2e AS builder
 
 # Install Node.js, npm and Yarn
+# npm is deliberately NOT pinned to a major. Wolfi tracks npm independently of
+# the Node major, and holding it at 11.x reintroduces the tar and
+# brace-expansion advisories (CVE-2026-59871/3/4/5, CVE-2026-13149/14257) whose
+# only fix is npm >= 12.0.1-r2. The installed version is recorded in
+# /tmp/versions.txt so major drift stays visible to consumers.
 RUN apk update && apk upgrade --no-cache && \
     apk add --no-cache 'nodejs=~24' yarn npm
 
@@ -18,7 +23,9 @@ SHELL ["/bin/ash", "-o", "pipefail", "-c"]
 RUN NODE_VERSION=$(node --version | sed 's/v//') && \
     echo "nodejs_major_tag=$(echo $NODE_VERSION | cut -d'.' -f1)" > /tmp/versions.txt && \
     echo "nodejs_minor_tag=$(echo $NODE_VERSION | cut -d'.' -f1-2)" >> /tmp/versions.txt && \
-    echo "nodejs=$NODE_VERSION" >> /tmp/versions.txt
+    echo "nodejs=$NODE_VERSION" >> /tmp/versions.txt && \
+    echo "npm=$(npm --version)" >> /tmp/versions.txt && \
+    echo "yarn=$(yarn --version)" >> /tmp/versions.txt
 
 RUN cat /tmp/versions.txt
 

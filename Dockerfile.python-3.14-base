@@ -1,7 +1,9 @@
 FROM cgr.dev/chainguard/wolfi-base:latest@sha256:003627df3c1e1bba0c4116afcddb314aca9594ee2328c7e876a8081a6c988b2e AS builder
 
 # CVE-2026-5450/5928: glibc >= 2.43-r7 (forced via apk upgrade)
-# CVE-2026-6357: temp PyPI pip 26.1+ in user dir; restore "py3.14-pip" when Wolfi bumps
+# pip/poetry/etc are installed from PyPI into the user dir so they can be kept ahead of
+# the distro packages; the Wolfi ensurepip wheel (py3-pip-wheel 26.2-r0) is retained so
+# "python3 -m venv" keeps working.
 RUN apk update && apk upgrade --no-cache && \
     apk add --no-cache --upgrade python-3.14 uv && \
     ln -sf /usr/bin/python3.14 /usr/bin/python3 && \
@@ -15,6 +17,12 @@ ENV POETRY_HOME=/home/nonroot \
 
 RUN python3 -m ensurepip --user --upgrade && \
     python3 -m pip install --no-cache-dir --upgrade --user -v pip poetry cryptography virtualenv
+
+# Raise pip's own bundled dependencies to their fixed versions:
+# msgpack 1.1.2 -> 1.2.1 (GHSA-6v7p-g79w-8964) and pkg_resources removed
+# (CVE-2025-47273, CVE-2026-59890 - setuptools dropped it in 82.0.0).
+COPY --chown=nonroot:nonroot scripts/harden-pip-vendor.py /tmp/harden-pip-vendor.py
+RUN python3 /tmp/harden-pip-vendor.py && rm -f /tmp/harden-pip-vendor.py
 
 # Poetry sets default max workers to num of cpu-cores + 4, but pip max connection pool
 # is set at 10 and will discard any above that when installing dependencies
@@ -35,9 +43,11 @@ echo "poetry=$(poetry --version 2>&1 | awk -F 'version |\\)' '{print $2}' | sed 
 echo "uv=$(uv --version 2>&1 | awk '{print $2}')" >> /tmp/versions.txt
 
 USER root
-# CVE-2026-6357: drop py3-pip-wheel artifacts (transitive dep) so Trivy reads only user-local pip 26.1+
-RUN apk del libcurl-openssl4 curl && \
-    rm -f /usr/share/python-wheels/pip-*.whl /var/lib/db/sbom/py3-pip-wheel-*.spdx.json
+# CVE-2026-6357 no longer applies: Wolfi's py3-pip-wheel is 26.2-r0, past the 26.1 floor,
+# so the bundled ensurepip wheel and its SBOM record are kept. Deleting them previously
+# broke "python3 -m venv" for every downstream consumer, because ensurepip sources its
+# wheel from /usr/share/python-wheels.
+RUN apk del libcurl-openssl4 curl
 
 USER nonroot
 RUN python3 --version

@@ -44,6 +44,9 @@ jobs:
         with:
           token: "${{ secrets.PAT_TOKEN }}"
           fetch-depth: 0 # Required to list tags
+          # The rebuild-tag push below authenticates explicitly via
+          # url.insteadOf, so the credential need not persist in the work tree.
+          persist-credentials: false
 
       - name: Discover available base images
         id: discover_images
@@ -65,7 +68,7 @@ jobs:
 
       - name: Install Trivy scanner
         env:
-          TRIVY_VERSION: "0.69.3"
+          TRIVY_VERSION: "0.72.0"
         run: |
           # Install Trivy (pinned version) and jq for vulnerability scanning
           sudo apt-get update && sudo apt-get install -y jq
@@ -112,7 +115,7 @@ jobs:
 
             for platform_suffix in linux-amd64 linux-arm64; do
               image_name="${base_name}-${platform_suffix}"
-              full_image_tag="${{ env.REGISTRY }}/${{ env.GH_REPO }}/${image_name}:latest"
+              full_image_tag="${REGISTRY}/${GH_REPO}/${image_name}:latest"
 
               echo "Checking image: $full_image_tag"
 
@@ -122,22 +125,22 @@ jobs:
                 continue # Skip to next platform
               fi
 
-              echo "Scanning $full_image_tag for vulnerabilities (severities: ${{ env.TRIGGER_SEVERITIES }})"
+              echo "Scanning $full_image_tag for vulnerabilities (severities: ${TRIGGER_SEVERITIES})"
               # Run Trivy vulnerability scan
               if trivy image \
                 --ignore-unfixed \
                 --exit-code 1 \
-                --severity "${{ env.TRIGGER_SEVERITIES }}" \
+                --severity "$TRIGGER_SEVERITIES" \
                 --format table \
                 "$full_image_tag"; then
-                echo "✅ No fixable vulnerabilities found in $full_image_tag"
+                echo "[OK] No fixable vulnerabilities found in $full_image_tag"
               else
                 scan_exit_code=$?
                 if [ $scan_exit_code -eq 1 ]; then
-                  echo "⚠️  Fixable vulnerabilities found in $full_image_tag"
+                  echo "[WARN] Fixable vulnerabilities found in $full_image_tag"
                   found_fixable_vulns_for_base=true
                 else
-                  echo "❌ Trivy scan failed for $full_image_tag (exit code: $scan_exit_code)"
+                  echo "[FAIL] Trivy scan failed for $full_image_tag (exit code: $scan_exit_code)"
                   # Continue processing other platforms
                 fi
               fi
@@ -145,7 +148,7 @@ jobs:
 
             # Check if we need to rebuild based on vulnerabilities + base image freshness
             if [ "$found_fixable_vulns_for_base" = true ]; then
-              echo "🔍 Vulnerabilities found for $base_name. Checking base image freshness..."
+              echo "[INFO] Vulnerabilities found for $base_name. Checking base image freshness..."
               dockerfile="Dockerfile.$base_name"
               if [ ! -f "$dockerfile" ]; then
                 echo "::error::Dockerfile $dockerfile not found. Cannot check base image. Skipping rebuild trigger for $base_name."
@@ -172,12 +175,12 @@ jobs:
                   if [ -n "$latest_sha_digest" ]; then
                     echo "Latest digest found: [$latest_sha_digest]"
                     if [ "$current_sha_digest" != "$latest_sha_digest" ]; then
-                      echo "🔄 Base image has updates: $latest_sha_digest vs $current_sha_digest"
+                      echo "[INFO] Base image has updates: $latest_sha_digest vs $current_sha_digest"
                       echo "Adding '$base_name' to rebuild list (vulnerabilities found + outdated base image)"
                       needs_rebuild_list="${needs_rebuild_list} ${base_name}"
                       rebuild_reason="Fixable vulnerabilities found and base image $from_image_name has updates."
                     else
-                      echo "✅ Base image [$from_image_name] is up-to-date. Skipping rebuild despite vulnerabilities."
+                      echo "[OK] Base image [$from_image_name] is up-to-date. Skipping rebuild despite vulnerabilities."
                       rebuild_reason="Fixable vulnerabilities found, but base image $from_image_name is already up-to-date."
                     fi
                   else
@@ -193,7 +196,7 @@ jobs:
                 rebuild_reason="Fixable vulnerabilities found, but could not parse FROM line in $dockerfile."
               fi
             else
-              echo "✅ No fixable vulnerabilities found for $base_name"
+              echo "[OK] No fixable vulnerabilities found for $base_name"
               rebuild_reason="No fixable vulnerabilities found."
             fi
 
@@ -210,12 +213,12 @@ jobs:
           unique_needs_rebuild=$(echo "$needs_rebuild_list" | xargs -n1 | sort -u | xargs)
 
           if [ -z "$unique_needs_rebuild" ]; then
-            echo "✅ No images require rebuilding based on vulnerability scans and base image freshness checks."
+            echo "[OK] No images require rebuilding based on vulnerability scans and base image freshness checks."
             echo "triggered_rebuilds=false" >> "$GITHUB_OUTPUT"
             exit 0
           fi
 
-          echo "🚀 Triggering rebuilds for: $unique_needs_rebuild"
+          echo "[INFO] Triggering rebuilds for: $unique_needs_rebuild"
           echo "triggered_rebuilds=true" >> "$GITHUB_OUTPUT"
           echo "rebuild_list=$unique_needs_rebuild" >> "$GITHUB_OUTPUT"
 
@@ -236,7 +239,7 @@ jobs:
             echo "Latest release tag found: $latest_release_tag"
 
             # COOLDOWN CHECK: Skip if recently rebuilt (unless force or critical)
-            if [ "${{ github.event.inputs.ignore_cooldown }}" != "true" ]; then
+            if [ "$INPUT_IGNORE_COOLDOWN" != "true" ]; then
               # Get the commit timestamp of the latest tag
               tag_commit=$(git rev-list -n 1 "$latest_release_tag")
               tag_timestamp=$(git show -s --format=%ct "$tag_commit")
@@ -245,18 +248,18 @@ jobs:
 
               cooldown_hours="${REBUILD_COOLDOWN_HOURS:-72}"
 
-              echo "⏱️  Hours since last release for $base_name: $hours_since_last_release (cooldown: ${cooldown_hours}h)"
+              echo "[INFO] Hours since last release for $base_name: $hours_since_last_release (cooldown: ${cooldown_hours}h)"
 
               if [ "$hours_since_last_release" -lt "$cooldown_hours" ]; then
-                echo "⏸️  Skipping $base_name: Within ${cooldown_hours}h cooldown period"
+                echo "[SKIP] Skipping $base_name: Within ${cooldown_hours}h cooldown period"
                 echo "   Last release: $(date -d "@${tag_timestamp}" 2>/dev/null || date -r "${tag_timestamp}")"
                 echo "   Next eligible: $(date -d "@$((tag_timestamp + cooldown_hours * 3600))" 2>/dev/null || date -r "$((tag_timestamp + cooldown_hours * 3600))")"
                 continue
               else
-                echo "✅ $base_name passed cooldown check (${hours_since_last_release}h > ${cooldown_hours}h)"
+                echo "[OK] $base_name passed cooldown check (${hours_since_last_release}h > ${cooldown_hours}h)"
               fi
             else
-              echo "⚠️  Cooldown check skipped (ignore_cooldown=true)"
+              echo "[WARN] Cooldown check skipped (ignore_cooldown=true)"
             fi
 
             # Extract version and create rebuild tag
@@ -272,9 +275,11 @@ jobs:
             new_tag="release/${base_name}/${version_part_no_build}+rebuild.${timestamp}"
 
             echo "Creating and pushing rebuild tag: $new_tag"
+            git config --global url."https://x-access-token:${GH_TOKEN}@github.com/".insteadOf "https://github.com/"
             git tag "$new_tag"
             git push origin "$new_tag"
-            echo "✅ Rebuild triggered for $base_name by pushing tag $new_tag"
+            echo "[OK] Rebuild triggered for $base_name by pushing tag $new_tag"
           done
         env:
           GH_TOKEN: ${{ secrets.PAT_TOKEN }}
+          INPUT_IGNORE_COOLDOWN: ${{ github.event.inputs.ignore_cooldown }}

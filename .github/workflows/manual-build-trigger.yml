@@ -26,6 +26,10 @@ on:
 env:
   REGISTRY: ghcr.io
 
+# Least privilege by default; only the tag-pushing job widens contents.
+permissions:
+  contents: read
+
 jobs:
   trigger_builds:
     runs-on: ubuntu-latest
@@ -33,9 +37,7 @@ jobs:
       has_images: ${{ steps.determine_images.outputs.has_images }}
       images_built: ${{ steps.determine_images.outputs.images_to_build }}
     permissions:
-      contents: write
-      packages: write
-      actions: read
+      contents: write # pushes release tags
     steps:
       - name: Harden Runner
         uses: step-security/harden-runner@bf7454d06d71f1098171f2acdf0cd4708d7b5920 # v2.20.0
@@ -47,6 +49,9 @@ jobs:
         with:
           fetch-depth: 0
           token: "${{ secrets.PAT_TOKEN }}"
+          # Tag pushes below authenticate explicitly via url.insteadOf, so the
+          # credential does not need to persist into the work tree.
+          persist-credentials: false
 
       - name: Configure Git
         run: |
@@ -55,14 +60,16 @@ jobs:
 
       - name: Determine images to build
         id: determine_images
+        env:
+          INPUT_IMAGES: ${{ github.event.inputs.images }}
         run: |
           images_to_build=()
-          if [ -z "${{ github.event.inputs.images }}" ]; then
+          if [ -z "$INPUT_IMAGES" ]; then
             echo "No images specified, building all images."
             mapfile -t images_to_build < <(find . -maxdepth 1 -name 'Dockerfile.*' -type f -printf '%f\n' | while IFS= read -r f; do echo "${f#Dockerfile.}"; done | sort -u)
           else
-            echo "Building specified images: ${{ github.event.inputs.images }}"
-            IFS=',' read -ra ADDR <<< "${{ github.event.inputs.images }}"
+            echo "Building specified images: $INPUT_IMAGES"
+            IFS=',' read -ra ADDR <<< "$INPUT_IMAGES"
             for i in "${ADDR[@]}"; do
               images_to_build+=("$i")
             done
@@ -79,7 +86,13 @@ jobs:
           fi
       - name: Create and push release tags
         if: steps.determine_images.outputs.has_images == 'true'
+        env:
+          IMAGES_TO_BUILD: ${{ steps.determine_images.outputs.images_to_build }}
+          INPUT_REASON: ${{ github.event.inputs.reason }}
+          GH_TOKEN: ${{ secrets.PAT_TOKEN }}
         run: |
+          git config --global url."https://x-access-token:${GH_TOKEN}@github.com/".insteadOf "https://github.com/"
+
           # Function to increment patch version
           increment_version() {
             local version=$1
@@ -99,9 +112,9 @@ jobs:
             git tag -l "release/$image/v*" | sort -V | tail -1
           }
 
-          images="${{ steps.determine_images.outputs.images_to_build }}"
+          images="$IMAGES_TO_BUILD"
 
-          echo "🏷️  Creating release tags..."
+          echo "[INFO] Creating release tags..."
 
           for image in $images; do
             latest_tag=$(get_latest_tag "$image")
@@ -112,7 +125,7 @@ jobs:
             fi
 
             new_tag="release/$image/v$new_version"
-            commit_msg="Manual release $image v$new_version - ${{ github.event.inputs.reason }}"
+            commit_msg="Manual release $image v$new_version - $INPUT_REASON"
 
             echo "Creating tag: $new_tag"
             git tag -a "$new_tag" -m "$commit_msg"
@@ -120,29 +133,36 @@ jobs:
             echo "Pushing tag: $new_tag"
             git push origin "$new_tag"
 
-            echo "✅ Created and pushed: $new_tag"
+            echo "[OK] Created and pushed: $new_tag"
           done
 
       - name: Build summary
         if: steps.determine_images.outputs.has_images == 'true'
+        env:
+          IMAGES_TO_BUILD: ${{ steps.determine_images.outputs.images_to_build }}
+          INPUT_REASON: ${{ github.event.inputs.reason }}
+          INPUT_FORCE_ALL: ${{ github.event.inputs.force_all }}
+          REPOSITORY: ${{ github.repository }}
         run: |
-          images="${{ steps.determine_images.outputs.images_to_build }}"
+          images="$IMAGES_TO_BUILD"
           image_count=$(echo "$images" | wc -w)
 
           echo ""
-          echo "📊 Build Summary"
+          echo "[INFO] Build Summary"
           echo "================"
-          echo "Reason: ${{ github.event.inputs.reason }}"
+          echo "Reason: $INPUT_REASON"
           echo "Images triggered: $image_count"
-          echo "Force all: ${{ github.event.inputs.force_all }}"
+          echo "Force all: $INPUT_FORCE_ALL"
           echo ""
-          echo "🌐 Monitor builds at:"
-          echo "https://github.com/${{ github.repository }}/actions"
+          echo "[INFO] Monitor builds at:"
+          echo "https://github.com/${REPOSITORY}/actions"
 
   wait_for_completion:
     needs: trigger_builds
     runs-on: ubuntu-latest
     if: needs.trigger_builds.outputs.has_images == 'true'
+    permissions:
+      contents: read
     steps:
       - name: Harden Runner
         uses: step-security/harden-runner@bf7454d06d71f1098171f2acdf0cd4708d7b5920 # v2.20.0
@@ -151,10 +171,10 @@ jobs:
 
       - name: Wait for workflow completion
         run: |
-          echo "⏱️  Triggered image builds will appear shortly in the Actions tab"
-          echo "🔗 https://github.com/${{ github.repository }}/actions"
+          echo "[INFO] Triggered image builds will appear shortly in the Actions tab"
+          echo "[INFO] https://github.com/${{ github.repository }}/actions"
           echo ""
-          echo "💡 Each release tag triggers a separate workflow run that will:"
+          echo "[INFO] Each release tag triggers a separate workflow run that will:"
           echo "   1. Build Docker images for both linux/amd64 and linux/arm64"
           echo "   2. Run security scans and tests"
           echo "   3. Create GitHub releases"
