@@ -27,11 +27,16 @@ runs:
     - name: Extract versions from container
       id: extract
       shell: bash
+      env:
+        INPUT_IMAGE_BASE_NAME: ${{ inputs.image-base-name }}
+        INPUT_IMAGE_TAG: ${{ inputs.image-tag }}
+        INPUT_PLATFORM: ${{ inputs.platform }}
+        INPUT_PLATFORM_SUFFIX: ${{ inputs.platform-suffix }}
       run: |
-        image_base_name="${{ inputs.image-base-name }}"
-        test_tag="${{ inputs.image-tag }}"
-        platform="${{ inputs.platform }}"
-        platform_suffix="${{ inputs.platform-suffix }}"
+        image_base_name="$INPUT_IMAGE_BASE_NAME"
+        test_tag="$INPUT_IMAGE_TAG"
+        platform="$INPUT_PLATFORM"
+        platform_suffix="$INPUT_PLATFORM_SUFFIX"
         output_file="env.versions.${platform_suffix}"
         extraction_status="false"
 

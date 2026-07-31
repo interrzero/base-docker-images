@@ -7,10 +7,12 @@ commandTests:
     args: ["--version"]
     expectedOutput: ["v24."]
     
+  # npm is not pinned to a major (see Dockerfile.nodejs-24-base), so assert a
+  # version shape rather than a major that Wolfi moves independently of Node.
   - name: "NPM is available"
     command: "npm"
     args: ["--version"]
-    expectedOutput: ["11."]
+    expectedOutput: ["^[0-9]+\\.[0-9]+\\.[0-9]+"]
     
   - name: "User is nobody"
     command: "id"

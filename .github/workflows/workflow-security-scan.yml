@@ -1,0 +1,120 @@
+# .github/workflows/workflow-security-scan.yml
+name: Workflow Security Scan
+
+# Two tracks, because a single scanner version cannot serve both purposes:
+#
+#   gate  - pinned, blocking, runs only when .github/ actually has a diff.
+#           Deterministic, so a red result means "this diff made things worse"
+#           rather than "the scanner learned a new rule overnight". That is what
+#           makes it defensible to block a PR on.
+#
+#   audit - floating (latest), non-blocking, scheduled. A pinned gate stops
+#           discovering new vulnerability classes, so this track exists to catch
+#           what the pin cannot see and raise an issue instead of failing a build.
+#
+# The pin is kept current by Renovate via the annotation below, so "bump
+# deliberately" is enforced by tooling rather than left to memory.
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - '.github/workflows/**'
+      - '.github/actions/**'
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/**'
+      - '.github/actions/**'
+  schedule:
+    # Mondays 11:00 UTC, an hour after the daily image scan.
+    - cron: '0 11 * * 1'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  gate:
+    name: zizmor (pinned gate)
+    if: github.event_name != 'schedule'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write # upload SARIF to code scanning
+    steps:
+      - name: Harden Runner
+        uses: step-security/harden-runner@bf7454d06d71f1098171f2acdf0cd4708d7b5920 # v2.20.0
+        with:
+          egress-policy: audit
+
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+
+      - name: Run zizmor
+        uses: zizmorcore/zizmor-action@6fc4b006235f201fdab3722e17240ab420d580e5 # v0.6.1
+        with:
+          # renovate: datasource=github-releases depName=zizmorcore/zizmor
+          version: 1.28.0
+          persona: regular
+          min-severity: low
+          inputs: .github/workflows/ .github/actions/
+
+  audit:
+    name: zizmor (latest audit)
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      issues: write # raise a tracking issue when the floating version finds more
+    steps:
+      - name: Harden Runner
+        uses: step-security/harden-runner@bf7454d06d71f1098171f2acdf0cd4708d7b5920 # v2.20.0
+        with:
+          egress-policy: audit
+
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+
+      - name: Run zizmor (latest, non-blocking)
+        id: audit
+        continue-on-error: true
+        uses: zizmorcore/zizmor-action@6fc4b006235f201fdab3722e17240ab420d580e5 # v0.6.1
+        with:
+          version: latest
+          persona: regular
+          min-severity: low
+          advanced-security: false # gate owns the code-scanning upload
+          inputs: .github/workflows/ .github/actions/
+
+      - name: Raise tracking issue on new findings
+        if: steps.audit.outcome == 'failure'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          set -euo pipefail
+          title="zizmor: latest version reports findings the pinned gate does not"
+          existing=$(gh issue list --repo "$REPO" --state open \
+            --label workflow-security --json number --jq '.[0].number // empty')
+          if [ -n "$existing" ]; then
+            gh issue comment "$existing" --repo "$REPO" \
+              --body "Still reproducing on the scheduled audit: $RUN_URL"
+            exit 0
+          fi
+          gh label create workflow-security --repo "$REPO" \
+            --description "Findings from the scheduled zizmor audit" \
+            --color BFD4F2 2>/dev/null || true
+          gh issue create --repo "$REPO" --title "$title" --label workflow-security \
+            --body "The scheduled zizmor audit runs the latest release, while the PR
+          gate runs a pinned version. Latest found something the pin did not.
+
+          Run: $RUN_URL
+
+          Either bump the pinned \`version:\` in
+          \`.github/workflows/workflow-security-scan.yml\` (Renovate normally does
+          this) and fix the findings, or record why they are not applicable."

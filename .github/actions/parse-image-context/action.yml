@@ -46,9 +46,13 @@ runs:
     - name: Parse tag and construct image context
       id: parse
       shell: bash
+      env:
+        INPUT_TAG: ${{ inputs.tag }}
+        INPUT_PLATFORM: ${{ inputs.platform }}
+        INPUT_FALLBACK_IMAGE: ${{ inputs.fallback-image }}
       run: |
-        tag_to_parse="${{ inputs.tag }}"
-        platform="${{ inputs.platform }}"
+        tag_to_parse="$INPUT_TAG"
+        platform="$INPUT_PLATFORM"
 
         echo "Input TAG: $tag_to_parse"
         echo "Input PLATFORM: $platform"
@@ -69,7 +73,7 @@ runs:
             version_no_build=$(echo "$version" | sed 's/\+.*//')
             is_release_tag="true"
 
-            # Extract major/minor version tags from semver (e.g., v1.1.108 → v1, v1.1)
+            # Extract major/minor version tags from semver (e.g., v1.1.108 -> v1, v1.1)
             if [[ $version_no_build =~ ^v([0-9]+)\.([0-9]+)\. ]]; then
                 major_tag="v${BASH_REMATCH[1]}"
                 minor_tag="v${BASH_REMATCH[1]}.${BASH_REMATCH[2]}"
@@ -91,7 +95,7 @@ runs:
         else
             # Not a release tag - use fallback
             echo "Not a release tag build. Using fallback values."
-            image_base_name="${{ inputs.fallback-image }}"
+            image_base_name="$INPUT_FALLBACK_IMAGE"
             version="dev"
             is_release_tag="false"
 

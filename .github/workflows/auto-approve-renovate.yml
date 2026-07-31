@@ -1,19 +1,31 @@
 name: Auto-approve Renovate PRs
 
+# pull_request rather than pull_request_target: Renovate opens its PRs from
+# in-repo branches (renovate/*), never forks, so secrets and write access are
+# already available here without handing them to untrusted fork code. A fork PR
+# that somehow reached this workflow would get a read-only token and no secrets,
+# so it fails closed instead of auto-approving.
 on:
-  pull_request_target:
+  pull_request:
     types:
       - opened
       - synchronize
       - reopened
 
 permissions:
-  pull-requests: write
+  contents: read
 
 jobs:
   auto-approve:
     runs-on: ubuntu-latest
-    if: github.actor == 'renovate[bot]' || github.actor == 'renovate'
+    permissions:
+      contents: read
+      pull-requests: write
+    # Gate on the author's immutable numeric id, not github.actor. actor is
+    # whoever triggered the event - a synchronize can be a different account -
+    # and a login string can be freed up and re-registered. 29139614 is the
+    # renovate[bot] app user.
+    if: github.event.pull_request.user.id == 29139614
     steps:
       - name: Harden Runner
         uses: step-security/harden-runner@bf7454d06d71f1098171f2acdf0cd4708d7b5920 # v2.20.0
