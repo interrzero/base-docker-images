@@ -297,10 +297,13 @@ jobs:
         env:
           IMAGE_BASE_NAME: ${{ needs.generate-matrix.outputs.image-base-name }}
           IMAGE_REF: ${{ steps.test_image.outputs.image_ref }}
+          PLATFORM: ${{ matrix.platform }}
         run: |
+          # --platform must be explicit: it defaults to the HOST architecture,
+          # so on an amd64 runner the arm64 image would fail to start.
           test_config="tests/container-structure/${IMAGE_BASE_NAME}.yaml"
           if [ -f "$test_config" ]; then
-            container-structure-test test --image "$IMAGE_REF" --config "$test_config"
+            container-structure-test test --platform "$PLATFORM" --image "$IMAGE_REF" --config "$test_config"
           else
             echo "No container structure test config found at $test_config, skipping tests"
           fi
