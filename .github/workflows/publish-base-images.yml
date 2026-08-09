@@ -313,7 +313,7 @@ jobs:
         with:
           scan-type: image
           image-ref: ${{ steps.test_image.outputs.image_ref }}
-          version: v0.72.0
+          version: v0.73.0
           format: table
           exit-code: "1"
           ignore-unfixed: true
