@@ -1,4 +1,4 @@
-FROM cgr.dev/chainguard/wolfi-base:latest@sha256:1454fe554abc89f10a43cabc290d8d61941d7e81c9778b408894aaba27d398a1 AS builder
+FROM cgr.dev/chainguard/wolfi-base:latest@sha256:a31344ab2cb8618db84f535eec56f76f6178b142cb92cb2e48676cc2dcebea72 AS builder
 
 # CVE-2026-3644: requires python-3.13 >= 3.13.12-r7
 # CVE-2026-5450/5928: glibc >= 2.43-r7 (forced via apk upgrade)
