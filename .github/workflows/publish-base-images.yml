@@ -18,6 +18,13 @@ env:
 permissions:
   contents: read
 
+# Never cancel. A publish run builds, signs and pushes images and can take over
+# an hour on the emulated arm64 leg; cancelling it risks a partially pushed tag.
+# The group is per-ref, so different images still publish in parallel.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
 jobs:
   generate-matrix:
     runs-on: ubuntu-latest
@@ -36,7 +43,7 @@ jobs:
             github.com:443
 
       - name: Checkout repository
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0 # Needed for git diff in PRs
           persist-credentials: false
@@ -110,12 +117,12 @@ jobs:
       matrix:
         platform: [linux/amd64, linux/arm64]
     permissions:
-      contents: write
-      packages: write
-      security-events: write
-      actions: read
-      attestations: write
-      id-token: write
+      contents: write        # create the GitHub release for the tag
+      packages: write        # push image layers and tags to GHCR
+      security-events: write # upload Trivy results to code scanning
+      actions: read          # read workflow metadata for the build summary
+      attestations: write    # write the SLSA provenance attestation
+      id-token: write        # OIDC token for keyless cosign signing
     steps:
       - name: Harden Runner
         uses: step-security/harden-runner@05e31511f85b41b11d1cf0ef85d0992719546e2c # v2.21.0
@@ -123,7 +130,7 @@ jobs:
           egress-policy: audit
 
       - name: Checkout repository
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
           persist-credentials: false
@@ -216,7 +223,7 @@ jobs:
 
       - name: Extract metadata (tags, labels) for Docker
         id: meta
-        uses: docker/metadata-action@dc802804100637a589fabce1cb79ff13a1411302 # v6
+        uses: docker/metadata-action@dc802804100637a589fabce1cb79ff13a1411302 # v6.2.0
         with:
           images: ${{ env.REGISTRY }}/${{ github.repository }}/${{ steps.context.outputs.image-name }}
           tags: |
@@ -233,7 +240,7 @@ jobs:
 
       - name: Build Docker Image for ${{ matrix.platform }}
         id: build
-        uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7
+        uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7.3.0
         with:
           pull: true
           file: Dockerfile.${{ needs.generate-matrix.outputs.image-base-name }}
@@ -309,7 +316,9 @@ jobs:
           fi
 
       - name: Run Trivy vulnerability scanner for ${{ matrix.platform }}
-        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0 (post-incident fixed release)
+        # v0.36.0 is the post-incident fixed release; earlier tags were withdrawn.
+        # The version comment must contain only the version, so that context lives here.
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         with:
           scan-type: image
           image-ref: ${{ steps.test_image.outputs.image_ref }}
@@ -324,7 +333,7 @@ jobs:
       - name: Push Docker Image for ${{ matrix.platform }}
         id: push
         if: github.event_name == 'push' && github.ref_type == 'tag'
-        uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7
+        uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7.3.0
         with:
           file: Dockerfile.${{ needs.generate-matrix.outputs.image-base-name }}
           platforms: ${{ matrix.platform }}
@@ -354,7 +363,7 @@ jobs:
 
       - name: Generate artifact attestation
         if: github.event_name == 'push' && github.ref_type == 'tag'
-        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4
+        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
         with:
           subject-name: ${{ env.REGISTRY }}/${{ github.repository }}/${{ steps.context.outputs.image-name }}
           subject-digest: ${{ steps.push.outputs.digest }}
@@ -371,7 +380,7 @@ jobs:
 
       - name: Upload versions artifact for ${{ matrix.platform }}
         if: steps.extract_versions.outputs.extraction-success == 'true' && github.event_name == 'push' && github.ref_type == 'tag'
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: versions-file-${{ steps.context.outputs.platform-suffix }}
           path: ${{ steps.extract_versions.outputs.versions-file }}
@@ -383,8 +392,8 @@ jobs:
     if: "github.event_name == 'push' && github.ref_type == 'tag' && needs.generate-matrix.outputs.is_deprecated != 'true'"
     runs-on: ubuntu-latest
     permissions:
-      contents: write
-      actions: read
+      contents: write  # create the GitHub release and upload its assets
+      actions: read    # read the publish job outputs used in the release body
     steps:
       - name: Harden Runner
         uses: step-security/harden-runner@05e31511f85b41b11d1cf0ef85d0992719546e2c # v2.21.0
@@ -395,7 +404,7 @@ jobs:
             github.com:443
 
       - name: Checkout repository
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
 
@@ -407,7 +416,7 @@ jobs:
           platform: linux/amd64
 
       - name: Download artifacts
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         continue-on-error: true
         with:
           path: artifacts/
@@ -419,11 +428,12 @@ jobs:
           CTX_IMAGE_BASE_NAME: ${{ needs.generate-matrix.outputs.image-base-name }}
           CTX_VERSION_TAG: ${{ needs.publish_image.outputs.version }}
           CTX_REPOSITORY: ${{ github.repository }}
+          CTX_REGISTRY: ${{ env.REGISTRY }}
         run: |
           image_base_name="$CTX_IMAGE_BASE_NAME"
           version_tag="$CTX_VERSION_TAG"
           repo_name="$CTX_REPOSITORY"
-          registry="${{ env.REGISTRY }}"
+          registry="$CTX_REGISTRY"
 
           # Use a temporary file to construct the body
           RELEASE_BODY_FILE="$(mktemp)"
@@ -534,8 +544,8 @@ jobs:
     if: "github.event_name == 'push' && github.ref_type == 'tag' && needs.generate-matrix.outputs.is_deprecated != 'true'"
     runs-on: ubuntu-latest
     permissions:
-      contents: read
-      packages: write
+      contents: read   # checkout only; no writes needed for manifest creation
+      packages: write  # push the multi-arch manifest lists to GHCR
     steps:
       - name: Harden Runner
         uses: step-security/harden-runner@05e31511f85b41b11d1cf0ef85d0992719546e2c # v2.21.0
@@ -547,11 +557,11 @@ jobs:
             pkg-containers.githubusercontent.com:443
 
       - name: Checkout repository
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
       - name: Log in to Container Registry
-        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4
+        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
         with:
           registry: ${{ env.REGISTRY }}
           username: ${{ github.actor }}
@@ -564,10 +574,11 @@ jobs:
           CTX_HAS_VERSION_TAGS: ${{ needs.publish_image.outputs.has-version-tags }}
           CTX_MAJOR_TAG: ${{ needs.publish_image.outputs.major-tag }}
           CTX_MINOR_TAG: ${{ needs.publish_image.outputs.minor-tag }}
+          CTX_REGISTRY: ${{ env.REGISTRY }}
         run: |
           image_base_name="$CTX_IMAGE_BASE_NAME"
           version="$CTX_VERSION"
-          registry="${{ env.REGISTRY }}/${CTX_REPOSITORY}"
+          registry="${CTX_REGISTRY}/${CTX_REPOSITORY}"
 
           echo "Creating multi-arch manifests for $image_base_name"
 
@@ -666,10 +677,11 @@ jobs:
           CTX_HAS_VERSION_TAGS: ${{ needs.publish_image.outputs.has-version-tags }}
           CTX_MAJOR_TAG: ${{ needs.publish_image.outputs.major-tag }}
           CTX_MINOR_TAG: ${{ needs.publish_image.outputs.minor-tag }}
+          CTX_REGISTRY: ${{ env.REGISTRY }}
         run: |
           image_base_name="$CTX_IMAGE_BASE_NAME"
           version="$CTX_VERSION"
-          registry="${{ env.REGISTRY }}/${CTX_REPOSITORY}"
+          registry="${CTX_REGISTRY}/${CTX_REPOSITORY}"
           universal_image="$registry/$image_base_name"
 
           echo "Verifying multi-arch manifests:"

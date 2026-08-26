@@ -5,7 +5,13 @@ FROM cgr.dev/chainguard/wolfi-base:latest@sha256:a31344ab2cb8618db84f535eec56f76
 # pip/poetry/etc are installed from PyPI into the user dir so they can be kept ahead of
 # the distro packages; the Wolfi ensurepip wheel (py3-pip-wheel 26.2-r0) is retained so
 # "python3 -m venv" keeps working.
-RUN apk update && apk upgrade --no-cache && \
+# The base image records exact "pkg=version" constraints in /etc/apk/world, which
+# makes a plain "apk upgrade" a no-op for those packages: the solver honours the
+# pin and leaves them behind. Relaxing the exact pins to bare names first is what
+# allows security updates to actually apply. Verified on apk-tools 2 and 3.
+# The "=[0-9]" anchor deliberately leaves fuzzy "=~" pins (e.g. nodejs=~24) alone.
+RUN sed -i -E 's/=[0-9].*$//' /etc/apk/world && \
+    apk update && apk upgrade --no-cache && \
     apk add --no-cache --upgrade python-3.13 uv && \
     ln -sf /usr/bin/python3.13 /usr/bin/python3 && \
     ln -sf /usr/bin/python3.13 /usr/bin/python

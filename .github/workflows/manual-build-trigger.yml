@@ -30,6 +30,11 @@ env:
 permissions:
   contents: read
 
+# Never cancel: this pushes release tags, which is not safe to interrupt.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
 jobs:
   trigger_builds:
     runs-on: ubuntu-latest
@@ -45,7 +50,7 @@ jobs:
           egress-policy: audit
 
       - name: Checkout repository
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
           token: "${{ secrets.PAT_TOKEN }}"
@@ -170,9 +175,11 @@ jobs:
           egress-policy: audit
 
       - name: Wait for workflow completion
+        env:
+          CTX_REPOSITORY: ${{ github.repository }}
         run: |
           echo "[INFO] Triggered image builds will appear shortly in the Actions tab"
-          echo "[INFO] https://github.com/${{ github.repository }}/actions"
+          echo "[INFO] https://github.com/${CTX_REPOSITORY}/actions"
           echo ""
           echo "[INFO] Each release tag triggers a separate workflow run that will:"
           echo "   1. Build Docker images for both linux/amd64 and linux/arm64"
