@@ -347,6 +347,15 @@ jobs:
       - name: Install cosign
         if: github.event_name == 'push' && github.ref_type == 'tag'
         uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6 # v4.1.2
+        with:
+          # Pin the cosign BINARY, not just the action. Left unset, the installer
+          # tracks whatever cosign is current, and a cosign major bump silently
+          # changes the on-registry signature format of every published image.
+          # That is exactly what happened when the default moved to v3: images
+          # kept signing green while cosign v2 clients started reporting
+          # "no signatures found" against them.
+          # renovate: datasource=github-releases depName=sigstore/cosign
+          cosign-release: v3.0.6
 
       - name: Sign container image with cosign
         if: github.event_name == 'push' && github.ref_type == 'tag'
@@ -358,8 +367,40 @@ jobs:
           for tag in ${TAGS}; do
             images+="${tag}@${DIGEST} "
           done
+          # Sign twice, once per storage format, so consumers on either cosign
+          # major can verify. The two cannot collide: the legacy format writes a
+          # "sha256-<digest>.sig" tag, while the Sigstore bundle format writes
+          # the "sha256-<digest>" referrers-fallback tag.
+          #   --new-bundle-format=false  readable by cosign v2.x and v3.x
+          #   --new-bundle-format=true   the v3 default, invisible to v2.x
           # shellcheck disable=SC2086
-          cosign sign --yes ${images}
+          cosign sign --yes --new-bundle-format=false ${images}
+          # shellcheck disable=SC2086
+          cosign sign --yes --new-bundle-format=true ${images}
+
+      - name: Verify signatures are discoverable in both formats
+        if: github.event_name == 'push' && github.ref_type == 'tag'
+        env:
+          DIGEST: ${{ steps.push.outputs.digest }}
+          CTX_IMAGE_NAME: ${{ steps.context.outputs.image-name }}
+          CTX_REPOSITORY: ${{ github.repository }}
+          CTX_REGISTRY: ${{ env.REGISTRY }}
+        run: |
+          set -eu
+          ref="${CTX_REGISTRY}/${CTX_REPOSITORY}/${CTX_IMAGE_NAME}@${DIGEST}"
+          # Assert the invariant rather than trust that signing exited 0. This
+          # is what would have caught the silent v2 -> v3 format change: the
+          # sign step stayed green while the published signature became
+          # undiscoverable to half the clients that verify it.
+          for fmt in false true; do
+            echo "== verifying with --new-bundle-format=${fmt}"
+            cosign verify \
+              --new-bundle-format="${fmt}" \
+              --certificate-identity-regexp "https://github.com/${CTX_REPOSITORY}/.github/workflows/.*" \
+              --certificate-oidc-issuer "https://token.actions.githubusercontent.com" \
+              "${ref}" > /dev/null
+          done
+          echo "OK: verifies in both the legacy and Sigstore bundle formats"
 
       - name: Generate artifact attestation
         if: github.event_name == 'push' && github.ref_type == 'tag'
@@ -488,6 +529,10 @@ jobs:
             --certificate-oidc-issuer "https://token.actions.githubusercontent.com" \\
             ${registry}/${repo_name}/${image_base_name}-linux-arm64:latest
           \`\`\`
+
+          Signed in both cosign storage formats, so any cosign 2.x or 3.x client
+          can verify. To target one explicitly, pass \`--new-bundle-format=false\`
+          for the legacy format or \`=true\` for the Sigstore bundle format.
 
           **Verify with GitHub CLI:**
           \`\`\`bash
