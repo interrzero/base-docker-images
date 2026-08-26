@@ -50,7 +50,17 @@ jobs:
       - name: Harden Runner
         uses: step-security/harden-runner@05e31511f85b41b11d1cf0ef85d0992719546e2c # v2.21.0
         with:
-          egress-policy: audit
+          # Endpoints derived from an observed run, not guessed:
+          #   github.com / objects.githubusercontent.com - checkout and action tarballs
+          #   ghcr.io / pkg-containers.githubusercontent.com - the zizmor container image
+          #   api.github.com - SARIF upload to code scanning, and gh issue create
+          egress-policy: block
+          allowed-endpoints: >
+            api.github.com:443
+            ghcr.io:443
+            github.com:443
+            objects.githubusercontent.com:443
+            pkg-containers.githubusercontent.com:443
 
       - name: Checkout repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -77,7 +87,17 @@ jobs:
       - name: Harden Runner
         uses: step-security/harden-runner@05e31511f85b41b11d1cf0ef85d0992719546e2c # v2.21.0
         with:
-          egress-policy: audit
+          # Endpoints derived from an observed run, not guessed:
+          #   github.com / objects.githubusercontent.com - checkout and action tarballs
+          #   ghcr.io / pkg-containers.githubusercontent.com - the zizmor container image
+          #   api.github.com - SARIF upload to code scanning, and gh issue create
+          egress-policy: block
+          allowed-endpoints: >
+            api.github.com:443
+            ghcr.io:443
+            github.com:443
+            objects.githubusercontent.com:443
+            pkg-containers.githubusercontent.com:443
 
       - name: Checkout repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1

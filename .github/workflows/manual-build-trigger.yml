@@ -172,7 +172,11 @@ jobs:
       - name: Harden Runner
         uses: step-security/harden-runner@05e31511f85b41b11d1cf0ef85d0992719546e2c # v2.21.0
         with:
-          egress-policy: audit
+          # This job only echoes text: no checkout, no network, no other actions.
+          # Nothing to allow beyond the runner's own control plane.
+          egress-policy: block
+          allowed-endpoints: >
+            github.com:443
 
       - name: Wait for workflow completion
         env:
