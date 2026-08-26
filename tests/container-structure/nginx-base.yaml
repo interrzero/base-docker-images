@@ -6,7 +6,7 @@ commandTests:
     command: "nginx"
     args: ["-v"]
     expectedError: ["nginx version: nginx/"]
-    
+
   - name: "Nginx help available"
     command: "nginx"
     args: ["-h"]
@@ -16,7 +16,7 @@ fileExistenceTests:
   - name: "Nginx binary exists"
     path: "/usr/sbin/nginx"
     shouldExist: true
-    
+
   - name: "Nginx config exists"
     path: "/etc/nginx/nginx.conf"
     shouldExist: true

@@ -3,14 +3,17 @@
 # Function to increment patch version
 increment_version() {
   local version=$1
+  # Declared before assignment so a failing command substitution is not masked
+  # by the "local" builtin's own exit status (SC2155).
+  local ver_num major minor patch new_patch
   # Extract version number (remove release/image-name/v prefix)
-  local ver_num=$(echo "$version" | sed 's/.*\/v//')
+  ver_num=$(echo "$version" | sed 's/.*\/v//')
   # Split into major.minor.patch
-  local major=$(echo "$ver_num" | cut -d. -f1)
-  local minor=$(echo "$ver_num" | cut -d. -f2)
-  local patch=$(echo "$ver_num" | cut -d. -f3)
+  major=$(echo "$ver_num" | cut -d. -f1)
+  minor=$(echo "$ver_num" | cut -d. -f2)
+  patch=$(echo "$ver_num" | cut -d. -f3)
   # Increment patch
-  local new_patch=$((patch + 1))
+  new_patch=$((patch + 1))
   echo "$major.$minor.$new_patch"
 }
 
@@ -20,8 +23,11 @@ echo "=============================================="
 # Fetch latest tags from origin
 git fetch origin --tags >/dev/null 2>&1
 
-# Get latest tag for each image type and calculate new version
-for image in fips-base go-1.25-base nginx-base nodejs-24-base python-3.13-base wolfi-base openjdk-17-base; do
+# Get latest tag for each image type and calculate new version.
+# Images are discovered from the Dockerfiles present rather than hardcoded, so
+# this cannot drift out of sync with the repo. The previous hardcoded list had
+# already gone stale and omitted python-3.14-base.
+for image in $(find . -maxdepth 1 -type f -name 'Dockerfile.*' ! -name 'deprecated.Dockerfile.*' -exec basename {} \; | sed 's/^Dockerfile\.//' | sort -u); do
   latest=$(git tag -l "release/$image/v*" | sort -V | tail -1)
   if [ -n "$latest" ]; then
     new_version=$(increment_version "$latest")

@@ -6,14 +6,14 @@ commandTests:
     command: "node"
     args: ["--version"]
     expectedOutput: ["v24."]
-    
+
   # npm is not pinned to a major (see Dockerfile.nodejs-24-base), so assert a
   # version shape rather than a major that Wolfi moves independently of Node.
   - name: "NPM is available"
     command: "npm"
     args: ["--version"]
     expectedOutput: ["^[0-9]+\\.[0-9]+\\.[0-9]+"]
-    
+
   - name: "User is nobody"
     command: "id"
     args: ["-un"]
@@ -21,14 +21,14 @@ commandTests:
 
 fileExistenceTests:
   - name: "Version file exists"
-    path: "/tmp/versions.txt" 
+    path: "/tmp/versions.txt"
     shouldExist: true
 
 fileContentTests:
   - name: "Version file contains Node.js version"
     path: "/tmp/versions.txt"
     expectedContents: ["nodejs=24."]
-    
+
   - name: "Version file contains major tag"
     path: "/tmp/versions.txt"
     expectedContents: ["nodejs_major_tag=24"]

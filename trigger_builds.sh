@@ -10,11 +10,14 @@ set -e
 # Function to increment patch version
 increment_version() {
   local version=$1
-  local ver_num=$(echo "$version" | sed 's/.*\/v//')
-  local major=$(echo "$ver_num" | cut -d. -f1)
-  local minor=$(echo "$ver_num" | cut -d. -f2)
-  local patch=$(echo "$ver_num" | cut -d. -f3)
-  local new_patch=$((patch + 1))
+  # Declared before assignment so that "set -e" still sees a failing command
+  # substitution; "local x=$(...)" would mask its exit status (SC2155).
+  local ver_num major minor patch new_patch
+  ver_num=$(echo "$version" | sed 's/.*\/v//')
+  major=$(echo "$ver_num" | cut -d. -f1)
+  minor=$(echo "$ver_num" | cut -d. -f2)
+  patch=$(echo "$ver_num" | cut -d. -f3)
+  new_patch=$((patch + 1))
   echo "$major.$minor.$new_patch"
 }
 
@@ -28,7 +31,8 @@ get_latest_tag() {
 dockerfile_modified_since_tag() {
   local image=$1
   local dockerfile="Dockerfile.$image"
-  local latest_tag=$(get_latest_tag "$image")
+  local latest_tag
+  latest_tag=$(get_latest_tag "$image")
   
   if [ -z "$latest_tag" ]; then
     echo "INFO: No previous tag found for $image, assuming modified"
@@ -112,8 +116,23 @@ main() {
   echo "INFO: Fetching latest tags from origin..."
   git fetch origin --tags >/dev/null 2>&1
   
-  # List all available images
-  images=(fips-base go-1.25-base nginx-base nodejs-24-base python-3.13-base wolfi-base openjdk-17-base)
+  # Discover available images from the Dockerfiles actually present, using the
+  # same rule as the GitHub Actions workflows. This list used to be hardcoded
+  # and had already drifted (python-3.14-base was missing), which silently
+  # excluded that image from --force-all and rejected it from --image.
+  # basename is used instead of find -printf so this stays portable to the BSD
+  # find on macOS, and a while-read loop instead of mapfile so it works on the
+  # bash 3.2 that ships as /bin/bash there.
+  images=()
+  while IFS= read -r dockerfile; do
+    images+=("${dockerfile#Dockerfile.}")
+  done < <(find . -maxdepth 1 -type f -name 'Dockerfile.*' ! -name 'deprecated.Dockerfile.*' -exec basename {} \; | sort -u)
+
+  if [ ${#images[@]} -eq 0 ]; then
+    echo "ERROR: No Dockerfiles found matching 'Dockerfile.*'"
+    exit 1
+  fi
+
   modified_images=()
   
   echo "INFO: Checking for modified Dockerfiles..."
@@ -124,8 +143,19 @@ main() {
     modified_images=("${images[@]}")
   elif [ -n "$SPECIFIC_IMAGE" ]; then
     echo "INFO: Building specific image: $SPECIFIC_IMAGE"
-    # Validate image name
-    if [[ " ${images[@]} " =~ " ${SPECIFIC_IMAGE} " ]]; then
+    # Validate image name with an exact comparison per element. Matching a
+    # space-joined "${images[@]}" inside [[ ]] relies on implicit array
+    # concatenation (SC2199) and on a quoted right-hand side that is not a
+    # regex (SC2076), both of which are fragile.
+    image_is_known=false
+    for known_image in "${images[@]}"; do
+      if [ "$known_image" = "$SPECIFIC_IMAGE" ]; then
+        image_is_known=true
+        break
+      fi
+    done
+
+    if [ "$image_is_known" = true ]; then
       modified_images=("$SPECIFIC_IMAGE")
     else
       echo "ERROR: Unknown image: $SPECIFIC_IMAGE"

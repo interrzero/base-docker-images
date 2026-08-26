@@ -13,7 +13,9 @@ This repository is a work in progress, but the produced images are considered st
 
 ## Available Images
 
-[![FIPS Base](https://img.shields.io/github/v/tag/interrzero/base-docker-images?filter=release/fips-base/*&label=fips-base&style=for-the-badge&logo=lock&color=red)](https://github.com/interrzero/base-docker-images/pkgs/container/base-docker-images%2Ffips-base)
+[![FIPS 140-3 Base](https://img.shields.io/github/v/tag/interrzero/base-docker-images?filter=release/fips-140-3/*&label=fips-140-3&style=for-the-badge&logo=lock&color=0B7285)](https://github.com/interrzero/base-docker-images/pkgs/container/base-docker-images%2Ffips-140-3)
+
+[![FIPS Base (deprecated)](https://img.shields.io/github/v/tag/interrzero/base-docker-images?filter=release/fips-base/*&label=fips-base%20%28deprecated%29&style=for-the-badge&logo=lock&color=red)](https://github.com/interrzero/base-docker-images/pkgs/container/base-docker-images%2Ffips-base)
 
 [![Go 1.25 Base](https://img.shields.io/github/v/tag/interrzero/base-docker-images?filter=release/go-1.25-base/*&label=go-1.25-base&style=for-the-badge&logo=go&color=00ADD8)](https://github.com/interrzero/base-docker-images/pkgs/container/base-docker-images%2Fgo-1.25-base)
 
@@ -31,7 +33,8 @@ This repository is a work in progress, but the produced images are considered st
 
 ### Latest linux/amd64 Releases
 
-* [fips-base-linux-amd64](https://github.com/interrzero/base-docker-images/pkgs/container/base-docker-images%2Ffips-base-linux-amd64)
+* [fips-140-3-linux-amd64](https://github.com/interrzero/base-docker-images/pkgs/container/base-docker-images%2Ffips-140-3-linux-amd64)
+* [fips-base-linux-amd64](https://github.com/interrzero/base-docker-images/pkgs/container/base-docker-images%2Ffips-base-linux-amd64) (deprecated, retires 2026-09-21)
 * [go-1.25-base-linux-amd64](https://github.com/interrzero/base-docker-images/pkgs/container/base-docker-images%2Fgo-1.25-base-linux-amd64)
 * [nginx-base-linux-amd64](https://github.com/interrzero/base-docker-images/pkgs/container/base-docker-images%2Fnginx-base-linux-amd64)
 * [nodejs-24-base-linux-amd64](https://github.com/interrzero/base-docker-images/pkgs/container/base-docker-images%2Fnodejs-24-base-linux-amd64)
@@ -42,7 +45,8 @@ This repository is a work in progress, but the produced images are considered st
 
 ### Latest linux/arm64 Releases
 
-* [fips-base-linux-arm64](https://github.com/interrzero/base-docker-images/pkgs/container/base-docker-images%2Ffips-base-linux-arm64)
+* [fips-140-3-linux-arm64](https://github.com/interrzero/base-docker-images/pkgs/container/base-docker-images%2Ffips-140-3-linux-arm64)
+* [fips-base-linux-arm64](https://github.com/interrzero/base-docker-images/pkgs/container/base-docker-images%2Ffips-base-linux-arm64) (deprecated, retires 2026-09-21)
 * [go-1.25-base-linux-arm64](https://github.com/interrzero/base-docker-images/pkgs/container/base-docker-images%2Fgo-1.25-base-linux-arm64)
 * [nginx-base-linux-arm64](https://github.com/interrzero/base-docker-images/pkgs/container/base-docker-images%2Fnginx-base-linux-arm64)
 * [nodejs-24-base-linux-arm64](https://github.com/interrzero/base-docker-images/pkgs/container/base-docker-images%2Fnodejs-24-base-linux-arm64)
@@ -97,7 +101,8 @@ Images are considered hardened when they do not contain fixed CVE vulnerabilitie
 * **Python**: 3.13.x and 3.14.x (from wolfi-base with python-3.13/python-3.14 packages, includes pip, poetry, uv)
 * **OpenJDK**: 17.x with Maven 3.9.8 (from wolfi-base with openjdk-17 package)
 * **Wolfi Base**: Latest minimal Linux distribution
-* **FIPS Base**: Custom OpenSSL 3.0.9 with FIPS validation ([beta](#beta-images))
+* **FIPS 140-3 Base**: CMVP-validated OpenSSL FIPS Provider 3.1.2, certificate #4985, approved mode enforced ([details](./FIPS.md))
+* **FIPS Base**: CMVP-validated OpenSSL FIPS Provider 3.0.9, certificates #4282/#4811 - **deprecated, certificates sunset 2026-09-21** ([migration](./FIPS.md#migrating-from-fips-base-to-fips-140-3))
 * **Nginx**: 1.29.x with headers-more module (custom build)
 
 ### Recommended Version Pinning
@@ -152,11 +157,26 @@ Anyone can pull the image locally with their Github [personal access token](http
 
 The beta images are tested within limited scope and are generally stable but not recommended for production use without thorough testing in lower environments.  We encourage you to use them for testing and development and provide feedback to us to help us get them to GA faster.  If any bugs or unexpected behaviors are encountered, please open an issue using the BUG_REPORT template in this repository with enough detail to reproduce the issue.
 
-#### FIPS-enabled base image
+#### FIPS-enabled base images
 
-The image built from the [Dockerfile.fips-base](./Dockerfile.fips-base) includes FIPS-enabled OpenSSL and the Dockerfile shows an example of how to use it in the `Example Stage 2` section that should be modified to your workload's specific needs.
+Two FIPS images are published. Both load a CMVP-validated OpenSSL FIPS Provider and enforce approved mode, so non-approved algorithms such as MD5 fail rather than silently falling back.
 
-[More information on the FIPS image.](./FIPS.md)
+| | [`fips-140-3`](./Dockerfile.fips-140-3) | [`fips-base`](./Dockerfile.fips-base) |
+|---|---|---|
+| Standard | FIPS 140-3 | FIPS 140-2 |
+| CMVP certificate | [#4985](https://csrc.nist.gov/projects/cryptographic-module-validation-program/certificate/4985) | [#4282](https://csrc.nist.gov/projects/cryptographic-module-validation-program/certificate/4282) / [#4811](https://csrc.nist.gov/projects/cryptographic-module-validation-program/certificate/4811) |
+| Module version | 3.1.2 | 3.0.9 |
+| Certificate sunset | 2030-03-10 | **2026-09-21** |
+| C library | glibc | musl |
+| Status | **Current** | **Deprecated** |
+
+**Use `fips-140-3` for new workloads.**
+
+`fips-base` is deprecated because both FIPS 140-2 certificates behind it reach their sunset date on **2026-09-21** and then move to the CMVP Historical list. It continues to build until that date, after which the Dockerfile is renamed to `deprecated.Dockerfile.fips-base`; tags published before then stay pullable but stop receiving patches. See the [migration notes](./FIPS.md#migrating-from-fips-base-to-fips-140-3) - the libc change from musl to glibc is the part that needs attention.
+
+Neither image runs on an operational environment listed on its certificate, so both rely on user affirmation under CMVP Management Manual 7.9.2. They must not be described as "FIPS validated on Wolfi". [FIPS.md](./FIPS.md) sets out exactly what may and may not be claimed, how to verify approved mode yourself, and why only the FIPS provider is compiled from validated source.
+
+[More information on the FIPS images.](./FIPS.md)
 
 ### Nginx Security
 

@@ -5,7 +5,7 @@ document.addEventListener('DOMContentLoaded', function() {
     // Simulate app initialization
     setTimeout(() => {
         statusElement.innerHTML = `
-            <p><strong>✅ App Status: Loaded</strong></p>
+            <p><strong>App Status: Loaded</strong></p>
             <p>Served by nginx-base on port 8080</p>
             <p>Built with nodejs-base build tools</p>
             <small>Request ID: ${Math.random().toString(36).substr(2, 9)}</small>
