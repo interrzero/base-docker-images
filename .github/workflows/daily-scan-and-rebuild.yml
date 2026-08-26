@@ -26,13 +26,24 @@ env:
   REBUILD_COOLDOWN_HOURS: "24"  # 1 day (daily rebuilds for both language and non-language)
   CRITICAL_COOLDOWN_HOURS: "0"  # No cooldown for CRITICAL vulnerabilities
 
+# Least privilege by default: the workflow grants nothing, and the single job
+# below widens only what it needs. Without this the run inherits the
+# repository default token permissions.
+permissions: {}
+
+# Never cancel: an interrupted run can push some rebuild tags and skip others,
+# leaving the cooldown state inconsistent.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
 jobs:
   scan_and_rebuild:
     runs-on: ubuntu-latest
     permissions:
       contents: write    # Needed to push new tags
       packages: read     # Needed to pull images and inspect manifests
-      actions: read
+      actions: read      # read prior run metadata when applying the rebuild cooldown
     steps:
       - name: Harden Runner
         uses: step-security/harden-runner@05e31511f85b41b11d1cf0ef85d0992719546e2c # v2.21.0
@@ -40,7 +51,7 @@ jobs:
           egress-policy: audit
 
       - name: Checkout repository
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           token: "${{ secrets.PAT_TOKEN }}"
           fetch-depth: 0 # Required to list tags

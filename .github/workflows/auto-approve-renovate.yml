@@ -12,6 +12,12 @@ on:
       - synchronize
       - reopened
 
+# Re-running on a newer commit supersedes the earlier approval, so cancelling
+# an in-flight run is safe here.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 permissions:
   contents: read
 
@@ -19,8 +25,8 @@ jobs:
   auto-approve:
     runs-on: ubuntu-latest
     permissions:
-      contents: read
-      pull-requests: write
+      contents: read        # read the PR head to evaluate the author gate
+      pull-requests: write  # submit the APPROVE review on Renovate PRs
     # Gate on the author's immutable numeric id, not github.actor. actor is
     # whoever triggered the event - a synchronize can be a different account -
     # and a login string can be freed up and re-registered. 29139614 is the

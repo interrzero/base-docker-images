@@ -1,6 +1,12 @@
 FROM cgr.dev/chainguard/wolfi-base:latest@sha256:a31344ab2cb8618db84f535eec56f76f6178b142cb92cb2e48676cc2dcebea72
 
-RUN apk update && apk upgrade --no-cache && \
+# The base image records exact "pkg=version" constraints in /etc/apk/world, which
+# makes a plain "apk upgrade" a no-op for those packages: the solver honours the
+# pin and leaves them behind. Relaxing the exact pins to bare names first is what
+# allows security updates to actually apply. Verified on apk-tools 2 and 3.
+# The "=[0-9]" anchor deliberately leaves fuzzy "=~" pins (e.g. nodejs=~24) alone.
+RUN sed -i -E 's/=[0-9].*$//' /etc/apk/world && \
+    apk update && apk upgrade --no-cache && \
     apk add --no-cache go-1.25 bash build-base git
 
 USER nonroot
