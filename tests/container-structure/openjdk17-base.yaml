@@ -6,12 +6,12 @@ commandTests:
     command: "java"
     args: ["-version"]
     expectedError: ["openjdk version \"17."]
-    
+
   - name: "Maven is available"
     command: "mvn"
-    args: ["--version"] 
+    args: ["--version"]
     expectedOutput: ["Apache Maven"]
-    
+
   - name: "User is nonroot"
     command: "whoami"
     expectedOutput: ["nonroot"]
@@ -25,7 +25,7 @@ fileContentTests:
   - name: "Version file contains Java version"
     path: "/tmp/versions.txt"
     expectedContents: ["java=17."]
-    
+
   - name: "Version file contains major tag"
     path: "/tmp/versions.txt"
     expectedContents: ["java_major_tag=17"]

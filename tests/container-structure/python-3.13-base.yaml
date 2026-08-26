@@ -1,16 +1,16 @@
 schemaVersion: 2.0.0
 
-# Test Python base image functionality  
+# Test Python base image functionality
 commandTests:
   - name: "Python version check"
     command: "python3"
     args: ["--version"]
     expectedOutput: ["Python 3."]
-    
+
   - name: "User is nonroot"
-    command: "whoami" 
+    command: "whoami"
     expectedOutput: ["nonroot"]
-    
+
   - name: "Pip is available"
     command: "pip3"
     args: ["--version"]
@@ -25,7 +25,7 @@ fileContentTests:
   - name: "Version file contains Python version"
     path: "/tmp/versions.txt"
     expectedContents: ["python=3."]
-    
+
   - name: "Version file contains major tag"
     path: "/tmp/versions.txt"
     expectedContents: ["python_major_tag=3"]

@@ -6,12 +6,12 @@ commandTests:
     command: "apk"
     args: ["--version"]
     expectedOutput: ["apk-tools"]
-    
+
   - name: "User is nonroot"
     command: "id"
     args: ["-un"]
     expectedOutput: ["nonroot"]
-    
+
   - name: "Shell is available"
     command: "sh"
     args: ["-c", "echo 'test'"]
@@ -21,7 +21,7 @@ fileExistenceTests:
   - name: "Package manager exists"
     path: "/sbin/apk"
     shouldExist: true
-    
+
   - name: "Basic shell exists"
     path: "/bin/sh"
     shouldExist: true
