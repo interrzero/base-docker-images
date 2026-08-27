@@ -572,6 +572,16 @@ jobs:
 
           Platform-specific images include full SLSA provenance attestations (\`provenance: mode=max\`) and SBOM.
 
+          > **Verify against the platform-specific tags below, not the
+          > multi-architecture tag.** Signatures and attestations are attached to
+          > \`${image_base_name}-linux-amd64\` and \`${image_base_name}-linux-arm64\`
+          > during the build. The multi-architecture tag
+          > \`${image_base_name}:latest\` is a manifest list assembled afterwards
+          > and carries neither, so verifying it returns \`HTTP 404\` even though
+          > the images it points to are properly signed. Pulling the
+          > multi-architecture tag is fine; only verification needs the
+          > platform-specific reference.
+
           **Verify image signatures (cosign):**
           \`\`\`bash
           # AMD64
