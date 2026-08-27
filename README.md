@@ -68,7 +68,22 @@ All images are built with supply chain security features:
 
 ### Verify Image Signatures
 
-Platform-specific images (`-linux-amd64`, `-linux-arm64`) include full attestations.
+> **Verify against the platform-specific tags**, not the multi-architecture one.
+> Signatures and attestations are attached to `<image>-linux-amd64` and
+> `<image>-linux-arm64` during the build. The multi-architecture tag
+> (`<image>:latest`) is a manifest list assembled afterwards and carries neither,
+> so verifying it fails even though the images it points to are properly signed:
+>
+> ```
+> gh attestation verify oci://ghcr.io/.../wolfi-base:latest        -> HTTP 404
+> gh attestation verify oci://ghcr.io/.../wolfi-base-linux-amd64:latest  -> verified
+> ```
+>
+> Pull whichever tag suits you; the multi-architecture one is fine for that. Only
+> the verification commands need the platform-specific reference.
+
+Every example below uses a `-linux-amd64` tag for that reason. Substitute
+`-linux-arm64` to verify the other architecture.
 
 **Using cosign:**
 ```bash
