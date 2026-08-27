@@ -78,15 +78,11 @@ cosign verify \
   ghcr.io/interrzero/base-docker-images/wolfi-base-linux-amd64:latest
 ```
 
-Images are signed in **both** cosign storage formats, so any cosign 2.x or 3.x
-client can verify them. If you need to target one explicitly, pass
-`--new-bundle-format=false` for the legacy format or `=true` for the Sigstore
-bundle format.
-
-> Signatures published before 2026-08-26 exist only in the Sigstore bundle
-> format and are **not** discoverable by cosign 2.x, which reports
-> `no signatures found` against a correctly signed image. Verify those with
-> cosign 3.x.
+> **Verify with cosign 3.x.** Images are signed with cosign 3, whose Sigstore
+> bundle format is not discoverable by cosign 2.x. A 2.x client reports
+> `no signatures found` against a correctly signed image. Dual-format signing is
+> not available: cosign 3 requires `--new-bundle-format` whenever a signing
+> config is in use, which is the default for keyless signing.
 
 **Using GitHub CLI:**
 ```bash

@@ -367,16 +367,17 @@ jobs:
           for tag in ${TAGS}; do
             images+="${tag}@${DIGEST} "
           done
-          # Sign twice, once per storage format, so consumers on either cosign
-          # major can verify. The two cannot collide: the legacy format writes a
-          # "sha256-<digest>.sig" tag, while the Sigstore bundle format writes
-          # the "sha256-<digest>" referrers-fallback tag.
-          #   --new-bundle-format=false  readable by cosign v2.x and v3.x
-          #   --new-bundle-format=true   the v3 default, invisible to v2.x
+          # Single format, deliberately. Dual-format signing was attempted and
+          # does not work on cosign v3: --use-signing-config defaults to true and
+          # requires --new-bundle-format, so the legacy format is unreachable
+          # from the default keyless path. Passing --new-bundle-format=false
+          # fails with:
+          #   must provide --new-bundle-format or --bundle where applicable
+          #   with --signing-config or --use-signing-config
+          # Consequence for consumers: cosign 2.x cannot verify these images and
+          # reports "no signatures found". Verify with cosign 3.x. See README.
           # shellcheck disable=SC2086
-          cosign sign --yes --new-bundle-format=false ${images}
-          # shellcheck disable=SC2086
-          cosign sign --yes --new-bundle-format=true ${images}
+          cosign sign --yes ${images}
 
       - name: Verify signatures are discoverable in both formats
         if: github.event_name == 'push' && github.ref_type == 'tag'
@@ -392,15 +393,11 @@ jobs:
           # is what would have caught the silent v2 -> v3 format change: the
           # sign step stayed green while the published signature became
           # undiscoverable to half the clients that verify it.
-          for fmt in false true; do
-            echo "== verifying with --new-bundle-format=${fmt}"
-            cosign verify \
-              --new-bundle-format="${fmt}" \
-              --certificate-identity-regexp "https://github.com/${CTX_REPOSITORY}/.github/workflows/.*" \
-              --certificate-oidc-issuer "https://token.actions.githubusercontent.com" \
-              "${ref}" > /dev/null
-          done
-          echo "OK: verifies in both the legacy and Sigstore bundle formats"
+          cosign verify \
+            --certificate-identity-regexp "https://github.com/${CTX_REPOSITORY}/.github/workflows/.*" \
+            --certificate-oidc-issuer "https://token.actions.githubusercontent.com" \
+            "${ref}" > /dev/null
+          echo "OK: signature is present and verifies with the pinned cosign"
 
       - name: Generate artifact attestation
         if: github.event_name == 'push' && github.ref_type == 'tag'
@@ -530,9 +527,9 @@ jobs:
             ${registry}/${repo_name}/${image_base_name}-linux-arm64:latest
           \`\`\`
 
-          Signed in both cosign storage formats, so any cosign 2.x or 3.x client
-          can verify. To target one explicitly, pass \`--new-bundle-format=false\`
-          for the legacy format or \`=true\` for the Sigstore bundle format.
+          Requires **cosign 3.x**. These images are signed with cosign 3, whose
+          Sigstore bundle format is not discoverable by cosign 2.x - a 2.x client
+          reports \`no signatures found\` against a correctly signed image.
 
           **Verify with GitHub CLI:**
           \`\`\`bash
