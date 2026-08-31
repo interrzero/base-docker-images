@@ -212,10 +212,9 @@ simply uses OpenSSL needs no change.
 
 Earlier revisions of `fips-base` shipped a source-built `openssl` binary at
 `/usr/local/ssl/bin/openssl`. That binary is gone, because shipping the whole
-3.0.9 tree is what carried the out-of-boundary CVEs. The path is retained as a
+3.0.9 tree is what could carry the out-of-boundary CVEs. The path is retained as a
 symlink to the distribution binary, so consumers invoking it by absolute path
 keep working and transparently get the patched, FIPS-enforcing OpenSSL.
 
 The 3.0.9 shared libraries that used to sit under `/usr/local/ssl/lib64` are
-**not** recreated. Anything linking them directly was linking an unpatched
-`libcrypto` and should fail visibly rather than be silently redirected.
+**not** recreated. 
