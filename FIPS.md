@@ -226,6 +226,38 @@ extensions built against musl will not run on glibc and must be rebuilt.
 `OPENSSL_CONF` and `OPENSSL_MODULES` are exported by both images, so code that
 simply uses OpenSSL needs no change.
 
+### Legacy path shim in `fips-140-3`
+
+`fips-140-3` keeps its FIPS material under `/opt/openssl-fips`, but the retired
+`fips-base` used `/usr/local/ssl`. Those old paths are symlinked onto the real
+ones, for a specific safety reason rather than convenience.
+
+A missing `OPENSSL_CONF` is **not an error** in OpenSSL - it silently falls back
+to the default provider. So a consumer migrating here who carried over
+`OPENSSL_CONF=/usr/local/ssl/openssl.cnf` would have got an image that looked
+FIPS-enabled and was not. Measured on the image before the shim existed:
+
+```
+OPENSSL_CONF=/usr/local/ssl/openssl.cnf openssl list -providers   ->  default
+echo x | OPENSSL_CONF=/usr/local/ssl/openssl.cnf openssl dgst -md5 ->  SUCCEEDS
+```
+
+With the shim, the same commands yield `base, fips` and a refused MD5. A
+build-time gate and container structure tests both assert this, so the shim
+cannot silently rot.
+
+**This is a convenience for a deliberate migration, not a claim of
+equivalence.** Two differences no symlink can bridge, both of which fail loudly:
+
+| | effect |
+|---|---|
+| musl to glibc | binaries built against `fips-base` will not execute |
+| `nobody` (65534) to `nonroot` (65532) | file ownership and `runAsUser` mismatches |
+
+Note also that the legacy path now resolves to **Module 3.1.2 under certificate
+#4985**, not 3.0.9 under #4282/#4811. If your compliance position names a
+specific certificate, the path being unchanged does not mean the certificate is.
+
 ### Compatibility shims in `fips-base`
 
 Earlier revisions of `fips-base` shipped a source-built `openssl` binary at

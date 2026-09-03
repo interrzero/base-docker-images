@@ -55,12 +55,41 @@ commandTests:
     args: ["list", "-providers"]
     expectedOutput: ["base[\\s\\S]*OpenSSL Base Provider[\\s\\S]*status: active"]
 
+  # Compatibility shim for the retired fips-base layout. A consumer carrying
+  # over OPENSSL_CONF=/usr/local/ssl/openssl.cnf must still get an enforcing
+  # image; without the shim OpenSSL silently falls back to the default provider
+  # because a missing config file is not an error.
+  - name: "Legacy fips-base config path still enforces approved mode"
+    command: "sh"
+    args: ["-c", "OPENSSL_CONF=/usr/local/ssl/openssl.cnf openssl list -providers"]
+    expectedOutput: ["OpenSSL FIPS Provider[\\s\\S]*status: active"]
+
+  - name: "Legacy config path refuses a non-approved algorithm"
+    command: "sh"
+    args: ["-c", "echo x | OPENSSL_CONF=/usr/local/ssl/openssl.cnf openssl dgst -md5 2>&1 || true"]
+    excludedOutput: ["MD5\\(stdin\\)"]
+    expectedOutput: ["unsupported"]
+
+  - name: "Legacy openssl binary path resolves"
+    command: "/usr/local/ssl/bin/openssl"
+    args: ["version"]
+    expectedOutput: ["OpenSSL"]
+
   - name: "User is nonroot"
     command: "id"
     args: ["-un"]
     expectedOutput: ["nonroot"]
 
 fileExistenceTests:
+  # Legacy fips-base paths, symlinked to the real locations.
+  - name: "Legacy openssl.cnf path exists"
+    path: "/usr/local/ssl/openssl.cnf"
+    shouldExist: true
+
+  - name: "Legacy fipsmodule.cnf path exists"
+    path: "/usr/local/ssl/fipsmodule.cnf"
+    shouldExist: true
+
   - name: "Validated FIPS module is present"
     path: "/opt/openssl-fips/ossl-modules/fips.so"
     shouldExist: true
