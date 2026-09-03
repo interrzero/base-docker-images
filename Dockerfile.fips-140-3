@@ -265,6 +265,36 @@ RUN printf '%s\n' \
     'default_properties = fips=yes' \
     > "${FIPS_ROOT}/openssl.cnf"
 
+# Compatibility shim for the retired fips-base layout.
+#
+# fips-base (FIPS 140-2, retired 2026-09-21) kept its FIPS material under
+# /usr/local/ssl and put /usr/local/ssl/bin first on PATH. A consumer migrating
+# here who carries over OPENSSL_CONF=/usr/local/ssl/openssl.cnf would otherwise
+# get FIPS SILENTLY DISABLED: OpenSSL does not error on a missing config file,
+# it quietly falls back to the default provider. Measured on this image before
+# the shim existed:
+#
+#   OPENSSL_CONF=/usr/local/ssl/openssl.cnf openssl list -providers  ->  default
+#   echo x | OPENSSL_CONF=/usr/local/ssl/openssl.cnf openssl dgst -md5  ->  SUCCEEDS
+#
+# A silently non-enforcing FIPS image is the exact defect that made fips-base
+# non-compliant for months, so the old paths are mapped onto the real ones
+# rather than left to fail open.
+#
+# This is a convenience for a deliberate migration, NOT a claim of equivalence.
+# The two images still differ in ways no symlink can bridge, and both fail
+# loudly rather than silently:
+#   musl -> glibc          binaries built for fips-base will not exec here
+#   nobody -> nonroot      uid 65534 -> 65532, permissions and runAsUser
+# Note also that the old path now resolves to Module 3.1.2 under certificate
+# #4985, not 3.0.9 under #4282/#4811. See FIPS.md.
+RUN set -eu; \
+    mkdir -p /usr/local/ssl/bin /usr/local/ssl/lib64/ossl-modules; \
+    ln -sf "${FIPS_ROOT}/openssl.cnf"           /usr/local/ssl/openssl.cnf; \
+    ln -sf "${FIPS_ROOT}/fipsmodule.cnf"        /usr/local/ssl/fipsmodule.cnf; \
+    ln -sf "${FIPS_ROOT}/ossl-modules/fips.so"  /usr/local/ssl/lib64/ossl-modules/fips.so; \
+    ln -sf /usr/bin/openssl                     /usr/local/ssl/bin/openssl
+
 # Build-time proof that the image is actually in approved mode. Every check
 # below is a hard failure: a broken config or an inert Module fails the build
 # here rather than shipping an image that merely looks FIPS-enabled.
@@ -294,7 +324,17 @@ RUN set -eu; \
         echo "FAIL: MD5 succeeded, image is NOT enforcing approved mode"; exit 1; \
     fi; \
     echo "OK: MD5 correctly refused"; \
-    rm -f /tmp/providers.txt
+    echo "== 6. legacy fips-base path must resolve AND still enforce =="; \
+    OPENSSL_CONF=/usr/local/ssl/openssl.cnf openssl list -providers > /tmp/legacy.txt; \
+    grep -q '^  fips$' /tmp/legacy.txt \
+        || { echo "FAIL: legacy path does not activate the fips provider"; exit 1; }; \
+    if echo x | OPENSSL_CONF=/usr/local/ssl/openssl.cnf openssl dgst -md5 >/dev/null 2>&1; then \
+        echo "FAIL: legacy path leaves FIPS unenforced - the shim is not working"; exit 1; \
+    fi; \
+    /usr/local/ssl/bin/openssl version > /dev/null \
+        || { echo "FAIL: legacy openssl path does not resolve"; exit 1; }; \
+    echo "OK: legacy /usr/local/ssl paths resolve and enforce approved mode"; \
+    rm -f /tmp/providers.txt /tmp/legacy.txt
 
 # Record the versions that matter for audit: the validated Module version, the
 # certificate it comes from, and the out-of-boundary library it runs against.
