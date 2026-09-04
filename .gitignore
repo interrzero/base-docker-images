@@ -1,3 +1,4 @@
 **/.DS_Store
 github-actions-deploy-key
 test-workflows-e2e.sh
+artifacts/

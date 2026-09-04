@@ -26,6 +26,70 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  # Cheap, always-on guard that runs in seconds and needs no build.
+  #
+  # The publish job also fails on a missing config, but only once a release tag
+  # has been cut and the image has already built - up to an hour on the emulated
+  # arm64 leg. This catches the same mistake on the pull request that introduces
+  # it. The PR path in generate-matrix only inspects the single changed
+  # Dockerfile, so it cannot see a gap anywhere else in the fleet; this job
+  # checks every image every time.
+  validate-structure-test-coverage:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Harden Runner
+        uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
+        with:
+          egress-policy: block
+          allowed-endpoints: >
+            github.com:443
+
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Every buildable image has a structure test config, and vice versa
+        run: |
+          set -euo pipefail
+          problems=0
+
+          # Forward: a buildable Dockerfile with no config. The glob matches the
+          # same set the release pipeline builds - "deprecated.Dockerfile.*" is
+          # excluded because it does not start with "Dockerfile.".
+          for dockerfile in Dockerfile.*; do
+            [ -e "$dockerfile" ] || continue
+            image="${dockerfile#Dockerfile.}"
+            config="tests/container-structure/${image}.yaml"
+            if [ ! -f "$config" ]; then
+              echo "::error file=${dockerfile}::${image} has no structure test config (expected ${config})"
+              problems=$((problems + 1))
+            fi
+          done
+
+          # Reverse: a config no image will ever load. This is the check that
+          # would have caught openjdk17-base.yaml, which sat in the tree looking
+          # like coverage for years while image openjdk-17-base ran untested.
+          for config in tests/container-structure/*.yaml; do
+            [ -e "$config" ] || continue
+            base="$(basename "$config" .yaml)"
+            if [ ! -f "Dockerfile.${base}" ]; then
+              echo "::error file=${config}::orphaned config - no Dockerfile.${base} exists, so nothing loads this file"
+              problems=$((problems + 1))
+            fi
+          done
+
+          if [ "$problems" -ne 0 ]; then
+            echo "${problems} structure-test coverage problem(s) found." >&2
+            echo "A config is loaded only at tests/container-structure/<image-base-name>.yaml," >&2
+            echo "where <image-base-name> is the suffix of its Dockerfile.<image-base-name>." >&2
+            exit 1
+          fi
+
+          echo "All buildable images have a matching structure test config."
+
   generate-matrix:
     runs-on: ubuntu-latest
     permissions:
@@ -314,14 +378,29 @@ jobs:
           IMAGE_REF: ${{ steps.test_image.outputs.image_ref }}
           PLATFORM: ${{ matrix.platform }}
         run: |
+          set -euo pipefail
           # --platform must be explicit: it defaults to the HOST architecture,
           # so on an amd64 runner the arm64 image would fail to start.
           test_config="tests/container-structure/${IMAGE_BASE_NAME}.yaml"
-          if [ -f "$test_config" ]; then
-            container-structure-test test --platform "$PLATFORM" --image "$IMAGE_REF" --config "$test_config"
-          else
-            echo "No container structure test config found at $test_config, skipping tests"
+          # A missing config is a hard failure, never a skip.
+          #
+          # This branch used to echo "skipping tests" and carry on, which let
+          # two of nine images publish completely untested for months and look
+          # green doing it: python-3.14-base had no config at all, and the
+          # openjdk config was named openjdk17-base.yaml so it never matched
+          # image base name openjdk-17-base. Neither produced a warning that
+          # anyone would see. Failing closed is the only way a near-miss
+          # filename becomes visible.
+          if [ ! -f "$test_config" ]; then
+            echo "::error::No container structure test config at ${test_config}"
+            echo "Every published image must have one, named exactly" >&2
+            echo "tests/container-structure/<image-base-name>.yaml." >&2
+            echo "Image base name for this build is: ${IMAGE_BASE_NAME}" >&2
+            echo "Configs currently present:" >&2
+            ls -1 tests/container-structure/ >&2
+            exit 1
           fi
+          container-structure-test test --platform "$PLATFORM" --image "$IMAGE_REF" --config "$test_config"
 
       - name: Run Trivy vulnerability scanner for ${{ matrix.platform }}
         # v0.36.0 is the post-incident fixed release; earlier tags were withdrawn.
