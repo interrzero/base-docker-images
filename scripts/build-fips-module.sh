@@ -1,10 +1,15 @@
 #!/bin/sh
 # Build a CMVP-validated OpenSSL FIPS Provider from unmodified upstream source.
 #
-# Shared by Dockerfile.fips-base (FIPS 140-2, module 3.0.9, certificates #4282
-# and #4811) and Dockerfile.fips-140-3 (FIPS 140-3, module 3.1.2, certificate
-# #4985). The compile method lives here exactly once so that a correction to it
-# cannot land in one image and be missed in the other.
+# Used by Dockerfile.fips-140-3 (FIPS 140-3, module 3.1.2, certificate #4985).
+#
+# It was previously shared with Dockerfile.fips-base (FIPS 140-2, module 3.0.9,
+# certificates #4282 and #4811), which was retired on 2026-09-21 when those
+# certificates reached their sunset. The retired file still calls this script,
+# so the 3.0.9 path is kept working, but it is no longer built by CI.
+#
+# The compile method lives here exactly once so that a correction to it cannot
+# land in one image and be missed in the other.
 #
 # WHY THIS SCRIPT MAY NOT BE "IMPROVED"
 # -------------------------------------

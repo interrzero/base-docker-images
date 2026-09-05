@@ -60,7 +60,7 @@ jobs:
             modified_dockerfile=$(git diff --name-only "$PR_BASE_SHA" "$HEAD_SHA" | grep "^Dockerfile\\." | head -n 1)
             if [ -n "$modified_dockerfile" ]; then
               detected_image="${modified_dockerfile#Dockerfile.}"
-              if [[ "$detected_image" == "go-base" || "$detected_image" == "nodejs-base" || "$detected_image" == "python-base" ]]; then
+              if [[ "$detected_image" == "go-base" || "$detected_image" == "nodejs-base" || "$detected_image" == "python-base" || "$detected_image" == "fips-base" ]]; then
                 echo "PR modifies a deprecated image ($detected_image). Halting build for this image."
                 echo "dockerfile_found=false" >> "$GITHUB_OUTPUT"
                 echo "tag=$GITHUB_REF_NAME_FULL" >> "$GITHUB_OUTPUT"

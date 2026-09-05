@@ -11,29 +11,47 @@ against.
 | Module version | 3.1.2 | 3.0.9 |
 | Certificate sunset | 2030-03-10 | **2026-09-21** |
 | Base distribution | Wolfi (glibc) | Wolfi Alpine (musl) |
-| Status | **Current** | **Deprecated** |
+| Status | **Current** | **Retired 2026-09-21** |
 
 **New workloads should use `fips-140-3`.**
 
-## Deprecation of `fips-base`
+## Retired: `fips-base` (FIPS 140-2)
 
-The FIPS 140-2 certificates behind `fips-base` both reach their sunset date on
-**2026-09-21**, after which they move to the CMVP Historical list. CMVP's
-position on Historical modules is that federal agencies "should not include
-these in new systems but can be procured for legacy systems", with continued
-use subject to the agency's own risk determination.
+**`fips-base` was retired on 2026-09-21 and is no longer built.**
 
-Accordingly:
+Both FIPS 140-2 certificates behind it, [#4282][c4282] and [#4811][c4811],
+reached their sunset date on that day and moved to the CMVP Historical list.
+CMVP's position on Historical modules is that federal agencies "should not
+include these in new systems but can be procured for legacy systems", with
+continued use subject to the agency's own risk determination.
 
-- `fips-base` continues to build and publish until 2026-09-21.
-- On that date `Dockerfile.fips-base` is renamed to
-  `deprecated.Dockerfile.fips-base`, which removes it from release tagging,
-  the daily rebuild and the manual build trigger.
-- Tags published before then remain pullable from GHCR indefinitely. They stop
-  receiving CVE patches once builds stop.
+[c4282]: https://csrc.nist.gov/projects/cryptographic-module-validation-program/certificate/4282
+[c4811]: https://csrc.nist.gov/projects/cryptographic-module-validation-program/certificate/4811
 
-The two images are deliberately kept close so that migration is mostly a
-change of image reference. See [Migrating](#migrating-from-fips-base-to-fips-140-3).
+What changed:
+
+- `Dockerfile.fips-base` is now `deprecated.Dockerfile.fips-base`, which
+  removes it from release tagging, the daily rebuild, the manual build trigger
+  and both local helper scripts. Its container structure test config was
+  removed with it.
+- `fips-base` was also added to the deprecated-name list in
+  `publish-base-images.yml`. That list is not what stops the retired file from
+  building - the rename already does, because the pull request path greps for
+  `^Dockerfile\.` and no longer matches. It guards the narrower case of someone
+  re-creating a file literally named `Dockerfile.fips-base`, and matches the
+  existing entries for `go-base`, `nodejs-base` and `python-base`.
+- **Tags published before 2026-09-21 remain pullable from GHCR but no longer
+  receive CVE patches.** Anything still pulling them is accumulating unpatched
+  vulnerabilities from that date onward.
+
+The image was in good order when retired: the FIPS provider genuinely active,
+and zero findings under both Trivy and grype. It was retired because its
+certificates expired, not because it was defective.
+
+Migration is mostly a change of image reference; the two images were
+deliberately kept close. See
+[Migrating](#migrating-from-fips-base-to-fips-140-3) - the libc change from
+musl to glibc is the part that needs attention.
 
 ## How these images are built
 

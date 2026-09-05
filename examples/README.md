@@ -41,7 +41,7 @@ This directory contains simple example Dockerfiles and configurations that demon
 
 > **Compliance note:** read [FIPS.md](../FIPS.md) before making any claim about an image built this way. It is built from CMVP-validated source per the Security Policy and is *user-affirmed* for this operating environment. It is **not** "FIPS 140-3 validated on Wolfi" - no such validation entry exists.
 >
-> The older `fips-base` image (FIPS 140-2, certificates #4282/#4811) is **deprecated**; its certificates sunset on **2026-09-21**. See the [migration notes](../FIPS.md#migrating-from-fips-base-to-fips-140-3) - the change from musl to glibc is the part that needs attention.
+> The older `fips-base` image (FIPS 140-2, certificates #4282/#4811) was **retired on 2026-09-21** when those certificates reached their sunset. It is no longer built, and tags published before then no longer receive CVE patches. See the [migration notes](../FIPS.md#migrating-from-fips-base-to-fips-140-3) - the change from musl to glibc is the part that needs attention.
 
 ### Supporting Files
 
