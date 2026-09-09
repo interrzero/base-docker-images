@@ -1,17 +1,25 @@
 ### FIPS 140-2 BASE IMAGE - OpenSSL FIPS Provider 3.0.9 ###
 #
 # +-------------------------------------------------------------------------+
-# | DEPRECATED - SCHEDULED FOR RETIREMENT ON 2026-09-21                      |
+# | RETIRED ON 2026-09-21 - THIS IMAGE IS NO LONGER BUILT                    |
 # |                                                                          |
 # | The CMVP certificates this image is built against (#4282 and #4811) are  |
-# | FIPS 140-2 validations and both reach their sunset date on 2026-09-21,   |
-# | after which they move to the CMVP Historical list. New builds of this    |
-# | image stop on that date and the Dockerfile is renamed to                 |
-# | deprecated.Dockerfile.fips-base. Previously published tags remain        |
-# | pullable from GHCR.                                                      |
+# | FIPS 140-2 validations. Both reached their sunset date on 2026-09-21 and |
+# | moved to the CMVP Historical list, so this file was renamed to           |
+# | deprecated.Dockerfile.fips-base. That name alone removes it from release |
+# | tagging, the daily rebuild, the manual build trigger and both helper     |
+# | scripts: every discovery path either excludes deprecated.Dockerfile.* or |
+# | globs Dockerfile.*, which no longer matches this filename.               |
 # |                                                                          |
-# | Migrate to Dockerfile.fips-140-3, which builds the FIPS 140-3 validated  |
-# | Module 3.1.2 under certificate #4985 (sunset 2030-03-10).                |
+# | Tags published before that date remain pullable from GHCR but no longer  |
+# | receive CVE patches.                                                     |
+# |                                                                          |
+# | Use Dockerfile.fips-140-3 instead: FIPS 140-3 validated Module 3.1.2     |
+# | under certificate #4985, sunset 2030-03-10.                              |
+# |                                                                          |
+# | Kept in the tree for provenance. The image was in good order when        |
+# | retired - FIPS provider genuinely active, zero findings under Trivy and  |
+# | grype. It was retired because its certificates expired.                  |
 # +-------------------------------------------------------------------------+
 #
 # ---------------------------------------------------------------------------
