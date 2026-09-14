@@ -113,7 +113,24 @@ docker buildx imagetools inspect ghcr.io/interrzero/base-docker-images/wolfi-bas
 
 ## Hardening
 
-Images are considered hardened when they do not contain fixed CVE vulnerabilities of the following severities: CRITICAL, HIGH, MEDIUM. They are based on [wolfi-base](<https://edu.chainguard.dev/open-source/wolfi/overview/>) from Chainguard. We use Renovate to automatically update each of these base images to the most recently published image ([`latest`](https://edu.chainguard.dev/chainguard/chainguard-images/reference/wolfi-base/tags_history/)).
+Images are considered hardened when they do not contain **fixed** CVE vulnerabilities of the following severities: CRITICAL, HIGH, MEDIUM. They are based on [wolfi-base](<https://edu.chainguard.dev/open-source/wolfi/overview/>) from Chainguard. We use Renovate to automatically update each of these base images to the most recently published image ([`latest`](https://edu.chainguard.dev/chainguard/chainguard-images/reference/wolfi-base/tags_history/)).
+
+### Current published exceptions
+
+An exception is recorded only when a fix genuinely does not exist. It is never
+used to defer work on a CVE that could be fixed. Every entry carries an expiry
+date, so the build gate fails closed by itself unless the exception is
+deliberately renewed. The full list, with evidence, is in
+[`.trivyignore.yaml`](.trivyignore.yaml).
+
+| CVE | Package | Severity | Why it cannot be fixed | Expires |
+|---|---|---|---|---|
+| [CVE-2026-85091](https://avd.aquasec.com/nvd/cve-2026-85091) | zlib | MEDIUM | No fixed package exists. Wolfi security metadata names `1.3.3-r0`; the newest published package is `1.3.2-r6`, and upstream zlib has no 1.3.3 release. Tracked at [wolfi-dev/os#78741](https://github.com/wolfi-dev/os/issues/78741). | 2026-09-16 |
+
+Scanning these images yourself will surface the entry above, because the
+vulnerability is genuinely present - it is unfixed everywhere, not hidden here.
+Anything else your scanner reports as fixable is a bug in ours; please open an
+issue.
 
 ## Current Language Versions
 

@@ -138,8 +138,13 @@ jobs:
 
               echo "Scanning $full_image_tag for vulnerabilities (severities: ${TRIGGER_SEVERITIES})"
               # Run Trivy vulnerability scan
+              # Honour the same expiring exception file as the publish gate.
+              # Without this the scan keeps reporting a CVE that has no
+              # available fix, and pushes a rebuild tag every day that the
+              # publish gate then rejects - churn that looks like activity.
               if trivy image \
                 --ignore-unfixed \
+                --ignorefile .trivyignore.yaml \
                 --exit-code 1 \
                 --severity "$TRIGGER_SEVERITIES" \
                 --format table \
