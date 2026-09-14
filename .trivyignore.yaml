@@ -27,9 +27,9 @@ vulnerabilities:
     # secdb flags it for this advisory anyway.
     #
     # So this is an unfixed vulnerability misclassified as fixable, not a
-    # fixable one being deferred. Holding the gate closed on it kept 202 real
-    # fixes - including a CRITICAL - out of published images while no fix could
-    # arrive.
+    # fixable one being deferred. Holding the gate closed on it blocked every
+    # publish from 2026-09-12 onward, so no image could pick up any fix at all
+    # while no fix for this one could arrive.
     #
     # Tracked upstream: https://github.com/wolfi-dev/os/issues/78741
     # Remove this entry as soon as Wolfi publishes a real fixed zlib, or
