@@ -1,0 +1,41 @@
+# Trivy ignore file - narrow, evidence-backed, and expiring.
+#
+# POLICY: this repository publishes images with no *fixable* CVEs. An entry may
+# only be added here when a fix genuinely does not exist, never to defer work on
+# one that does. Every entry carries an expiry so the gate fails closed by
+# itself; renewing one is a deliberate decision, not a default.
+
+vulnerabilities:
+  - id: CVE-2026-85091
+    # zlib heap buffer overflow, MEDIUM. Present in all published images.
+    #
+    # Trivy classifies this as fixable only because Wolfi's security database
+    # names a fixed version that has never been published. Verified 2026-09-14
+    # against the authoritative sources:
+    #
+    #   packages.wolfi.dev/os/security.json  -> "1.3.3-r0: CVE-2026-85091"
+    #   live apk index (apk policy zlib)     -> newest published is 1.3.2-r6
+    #   zlib upstream releases               -> newest is 1.3.2; no 1.3.3 exists
+    #   wolfi-dev/os commit 5c0896c          -> bumped epoch 5 to 6 and changed
+    #                                           nothing else, so 1.3.2-r6 is a
+    #                                           rebuild, not a patch
+    #   Ubuntu                               -> vulnerable / fix deferred
+    #
+    # There is also no way to engineer around it. zlib cannot be removed
+    # (apk-tools and wolfi-base depend on it), and pinning below the affected
+    # range is worse: zlib 1.3.1-r51 reintroduces CVE-2026-27171 and Wolfi's
+    # secdb flags it for this advisory anyway.
+    #
+    # So this is an unfixed vulnerability misclassified as fixable, not a
+    # fixable one being deferred. Holding the gate closed on it kept 202 real
+    # fixes - including a CRITICAL - out of published images while no fix could
+    # arrive.
+    #
+    # Tracked upstream: https://github.com/wolfi-dev/os/issues/78741
+    # Remove this entry as soon as Wolfi publishes a real fixed zlib, or
+    # corrects the metadata.
+    statement: >-
+      No fixed zlib package exists. Wolfi security metadata names 1.3.3-r0;
+      the newest published package is 1.3.2-r6 and upstream zlib has no 1.3.3
+      release. Tracked at wolfi-dev/os#78741.
+    expired_at: 2026-09-16

@@ -1,11 +1,20 @@
 FROM cgr.dev/chainguard/wolfi-base:latest@sha256:918a593b8268c222afd4e2c4f06860ac984e60719b4697e4c71d796bc8fcd042
 
-# if you need a quicker turnaround, you can patch the image like the below,
-# before the automated image build picks up the new CVE fixes (24-48 hours, usually)
-
-# USER root
-# RUN apk update && \
-# apk add --upgrade --no-cache libssl3 libcrypto3
+# Apply outstanding security updates at build time.
+#
+# Without this the image can only ever be as current as the pinned base digest,
+# so a rebuild triggered by the daily vulnerability scan reproduces the same
+# vulnerable packages and the scan finds them again the next day. That loop ran
+# for days: the base already carried fixed glibc and busybox while this image
+# kept shipping the old ones.
+#
+# The base image records exact "pkg=version" constraints in /etc/apk/world, which
+# makes a plain "apk upgrade" a no-op for those packages: the solver honours the
+# pin and leaves them behind. Relaxing the exact pins to bare names first is what
+# allows security updates to actually apply. Verified on apk-tools 2 and 3.
+# The "=[0-9]" anchor deliberately leaves fuzzy "=~" pins (e.g. nodejs=~24) alone.
+USER root
+RUN sed -i -E 's/=[0-9].*$//' /etc/apk/world && \
+    apk update && apk upgrade --no-cache
 
 USER nonroot
-

@@ -336,6 +336,11 @@ jobs:
           ignore-unfixed: true
           vuln-type: "os,library"
           severity: "CRITICAL,HIGH,MEDIUM"
+          # Narrow, evidence-backed, expiring exceptions only. Entries carry an
+          # expired_at date, so an exception that is not deliberately renewed
+          # stops applying and this gate fails closed on its own. See the file
+          # for the standard an entry has to meet.
+          trivyignores: .trivyignore.yaml
 
       # Push image only after all tests and security scans pass
       - name: Push Docker Image for ${{ matrix.platform }}

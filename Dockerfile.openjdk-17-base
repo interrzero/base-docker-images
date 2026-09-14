@@ -7,8 +7,20 @@ ARG MAVEN_VERSION=3.9
 ARG OPENJDK_PACKAGE=openjdk-17
 
 # Install necessary packages, common build tools, create non-root user, and perform cleanup
-# --upgrade ensures latest packages for security (including dependencies)
-RUN apk update && \
+#
+# "apk add --upgrade" only upgrades the packages named below and their
+# dependencies. Everything else the base image ships - busybox, zlib, the base
+# glibc - stays at whatever the pinned digest carried, so a rebuild reproduced
+# the same vulnerable packages and the daily scan found them again. A full
+# "apk upgrade" is what actually refreshes those.
+#
+# The base image records exact "pkg=version" constraints in /etc/apk/world, which
+# makes a plain "apk upgrade" a no-op for those packages: the solver honours the
+# pin and leaves them behind. Relaxing the exact pins to bare names first is what
+# allows security updates to actually apply. Verified on apk-tools 2 and 3.
+# The "=[0-9]" anchor deliberately leaves fuzzy "=~" pins (e.g. nodejs=~24) alone.
+RUN sed -i -E 's/=[0-9].*$//' /etc/apk/world && \
+    apk update && apk upgrade --no-cache && \
     apk add --no-cache --upgrade \
         # Core Java/Maven stack
         ${OPENJDK_PACKAGE} \
