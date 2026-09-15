@@ -34,8 +34,15 @@ vulnerabilities:
     # Tracked upstream: https://github.com/wolfi-dev/os/issues/78741
     # Remove this entry as soon as Wolfi publishes a real fixed zlib, or
     # corrects the metadata.
+    #
+    # Re-verified 2026-09-15, on renewal from the original 2026-09-16 expiry.
+    # zlib 1.3.2-r7 has since been published, and it does not help: commit
+    # 81942f1 bumped the epoch and added a cpe block, leaving
+    # expected-commit da607da7 untouched, so r7 is built from the identical
+    # upstream source as r6. secdb still names 1.3.3-r0, upstream zlib still
+    # has no 1.3.3 release, and issue 78741 is still open with no reply.
     statement: >-
       No fixed zlib package exists. Wolfi security metadata names 1.3.3-r0;
       the newest published package is 1.3.2-r6 and upstream zlib has no 1.3.3
       release. Tracked at wolfi-dev/os#78741.
-    expired_at: 2026-09-16
+    expired_at: 2026-09-22
