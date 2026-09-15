@@ -125,7 +125,7 @@ deliberately renewed. The full list, with evidence, is in
 
 | CVE | Package | Severity | Why it cannot be fixed | Expires |
 |---|---|---|---|---|
-| [CVE-2026-85091](https://avd.aquasec.com/nvd/cve-2026-85091) | zlib | MEDIUM | No fixed package exists. Wolfi security metadata names `1.3.3-r0`; the newest published package is `1.3.2-r6`, and upstream zlib has no 1.3.3 release. Tracked at [wolfi-dev/os#78741](https://github.com/wolfi-dev/os/issues/78741). | 2026-09-16 |
+| [CVE-2026-85091](https://avd.aquasec.com/nvd/cve-2026-85091) | zlib | MEDIUM | No fixed package exists. Wolfi security metadata names `1.3.3-r0`; the newest published package is `1.3.2-r7`, which is a metadata-only rebuild of the same upstream source, and upstream zlib has no 1.3.3 release. Tracked at [wolfi-dev/os#78741](https://github.com/wolfi-dev/os/issues/78741). | 2026-09-22 |
 
 Scanning these images yourself will surface the entry above, because the
 vulnerability is genuinely present - it is unfixed everywhere, not hidden here.
