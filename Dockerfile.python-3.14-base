@@ -1,4 +1,4 @@
-FROM cgr.dev/chainguard/wolfi-base:latest@sha256:918a593b8268c222afd4e2c4f06860ac984e60719b4697e4c71d796bc8fcd042 AS builder
+FROM cgr.dev/chainguard/wolfi-base:latest@sha256:3754b6da0e1ccdab0fe46abfdd7bbbba994b593c28149f6659fa6597f2261aeb AS builder
 
 # CVE-2026-5450/5928: glibc >= 2.43-r7 (forced via apk upgrade)
 # pip/poetry/etc are installed from PyPI into the user dir so they can be kept ahead of
