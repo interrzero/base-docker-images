@@ -31,18 +31,37 @@ vulnerabilities:
     # publish from 2026-09-12 onward, so no image could pick up any fix at all
     # while no fix for this one could arrive.
     #
-    # Tracked upstream: https://github.com/wolfi-dev/os/issues/78741
-    # Remove this entry as soon as Wolfi publishes a real fixed zlib, or
-    # corrects the metadata.
+    # The phantom fixed version is DELIBERATE, not a mistake. Chainguard
+    # explained why in https://github.com/wolfi-dev/os/issues/78741, which they
+    # closed as completed on 2026-09-15:
     #
-    # Re-verified 2026-09-15, on renewal from the original 2026-09-16 expiry.
-    # zlib 1.3.2-r7 has since been published, and it does not help: commit
-    # 81942f1 bumped the epoch and added a cpe block, leaving
-    # expected-commit da607da7 untouched, so r7 is built from the identical
-    # upstream source as r6. secdb still names 1.3.3-r0, upstream zlib still
-    # has no 1.3.3 release, and issue 78741 is still open with no reply.
+    #   "Normally we'd file a pending-upstream-fix event here, as there's no
+    #    released version of zlib containing the fix. However, we currently
+    #    can't raise such events for CVEs that Grype doesn't detect [...] we've
+    #    created a fixed event against the version where it'll be addressed in
+    #    the next upstream release (v1.3.3), to indicate awareness of the CVE."
+    #
+    # Two other reporters asked for the entry to be withdrawn on the grounds
+    # that it advertises a remediation that cannot be performed. Chainguard
+    # declined and closed the issue. So there is no metadata-correction path:
+    # the only thing that lifts this is upstream zlib releasing 1.3.3, and
+    # upstream's last release was v1.3.2 on 2026-02-17.
+    #
+    # Because the real trigger is an upstream release with no schedule, the
+    # date below is a backstop rather than the mechanism. The
+    # zlib_exception_still_valid job in daily-scan-and-rebuild.yml watches the
+    # Wolfi index and the upstream release feed every day and fails the moment
+    # either produces a fix, so this entry gets removed when the fix exists
+    # rather than when a guessed date arrives.
+    #
+    # Re-verified 2026-09-15: zlib 1.3.2-r7 is published on both arches and does
+    # not help - commit 81942f1 bumped the epoch and added a cpe block, leaving
+    # expected-commit da607da7 untouched, so r7 is the identical upstream source
+    # as r6. The cpe addition is likely the "missing metadata" the maintainer
+    # referred to, which may eventually let them use pending-upstream-fix
+    # instead; it has not yet.
     statement: >-
       No fixed zlib package exists. Wolfi security metadata names 1.3.3-r0;
       the newest published package is 1.3.2-r6 and upstream zlib has no 1.3.3
       release. Tracked at wolfi-dev/os#78741.
-    expired_at: 2026-09-22
+    expired_at: 2026-12-14

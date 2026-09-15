@@ -38,6 +38,70 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  # Watch for the event that makes the zlib exception removable.
+  #
+  # .trivyignore.yaml suppresses CVE-2026-85091 because Wolfi's security
+  # metadata names a fixed version, 1.3.3-r0, that has never been published.
+  # Chainguard confirmed in wolfi-dev/os#78741 that this is deliberate and will
+  # stand until upstream zlib releases 1.3.3, so the exception cannot be lifted
+  # by a metadata correction - only by that release.
+  #
+  # A date-based expiry alone would either lapse while the situation is
+  # unchanged or get renewed on autopilot. This job watches the real trigger and
+  # fails loudly the day it fires, so the exception is removed because the fix
+  # exists rather than because a guessed date arrived.
+  zlib_exception_still_valid:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Harden Runner
+        uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
+        with:
+          egress-policy: block
+          allowed-endpoints: >
+            api.github.com:443
+            github.com:443
+            packages.wolfi.dev:443
+
+      - name: Fail if a fixed zlib is available
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          triggered=0
+
+          # 1. The package that would actually clear the Trivy finding.
+          curl -fsSL https://packages.wolfi.dev/os/x86_64/APKINDEX.tar.gz -o idx.tar.gz
+          newest="$(tar -xzOf idx.tar.gz APKINDEX | grep -A3 '^P:zlib$' | grep '^V:' | sed 's/^V://' | sort -V | tail -1)"
+          echo "newest zlib in the Wolfi index: ${newest}"
+          case "$newest" in
+            1.3.2-*|1.3.1*|1.2.*|1.3-*)
+              echo "still below the claimed fixed version 1.3.3-r0" ;;
+            *)
+              echo "::error::Wolfi now ships zlib ${newest}. Remove the CVE-2026-85091 entry from .trivyignore.yaml and the README exceptions table."
+              triggered=1 ;;
+          esac
+
+          # 2. The upstream release Chainguard said they are waiting on. Checked
+          #    as well as the index because the package usually lags the release
+          #    by a few days, and the notice is more useful early.
+          latest="$(gh release list --repo madler/zlib --limit 1 --json tagName --jq '.[0].tagName' || echo "")"
+          echo "newest upstream zlib release: ${latest:-unknown}"
+          case "$latest" in
+            ""|v1.3.2|v1.3.1|v1.3|v1.2.*)
+              echo "no 1.3.3 release yet" ;;
+            *)
+              echo "::error::Upstream zlib published ${latest}. A fixed Wolfi package should follow; plan removal of the CVE-2026-85091 exception."
+              triggered=1 ;;
+          esac
+
+          if [ "$triggered" -ne 0 ]; then
+            echo "The zlib exception is no longer justified." >&2
+            exit 1
+          fi
+          echo "Exception still justified: no fixed zlib available."
+
   scan_and_rebuild:
     runs-on: ubuntu-latest
     permissions:
