@@ -125,7 +125,7 @@ deliberately renewed. The full list, with evidence, is in
 
 | CVE | Package | Severity | Why it cannot be fixed | Expires |
 |---|---|---|---|---|
-| [CVE-2026-85091](https://avd.aquasec.com/nvd/cve-2026-85091) | zlib | MEDIUM | No fixed package exists. Wolfi security metadata names `1.3.3-r0`; the newest published package is `1.3.2-r7`, which is a metadata-only rebuild of the same upstream source, and upstream zlib has no 1.3.3 release. The phantom fixed version is deliberate - Chainguard uses it so Grype detects the CVE at all, and [declined to withdraw it](https://github.com/wolfi-dev/os/issues/78741). It lifts only when upstream zlib releases 1.3.3. | 2026-12-14 |
+| [CVE-2026-85091](https://avd.aquasec.com/nvd/cve-2026-85091) | zlib | MEDIUM | A fixed package now exists - Wolfi shipped `1.3.2.1_rc20260601-r0` on 2026-09-16, an RC cut from upstream's develop branch with the patch applied. Scanner databases lag the feed by 24-48 hours, so they still flag images that already carry the fix. This entry is a bridge over that lag and will be removed once scans come back clean. Background: [wolfi-dev/os#78741](https://github.com/wolfi-dev/os/issues/78741). | 2026-09-23 |
 
 Scanning these images yourself will surface the entry above, because the
 vulnerability is genuinely present - it is unfixed everywhere, not hidden here.
@@ -153,7 +153,7 @@ scanner the same way we do, and remove the entry when upstream zlib ships 1.3.3:
 vulnerabilities:
   - id: CVE-2026-85091
     statement: "zlib: no fixed package exists upstream or in Wolfi."
-    expired_at: 2026-12-14
+    expired_at: 2026-09-23
 ```
 
 ```yaml
