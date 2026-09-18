@@ -125,12 +125,46 @@ deliberately renewed. The full list, with evidence, is in
 
 | CVE | Package | Severity | Why it cannot be fixed | Expires |
 |---|---|---|---|---|
-| [CVE-2026-85091](https://avd.aquasec.com/nvd/cve-2026-85091) | zlib | MEDIUM | No fixed package exists. Wolfi security metadata names `1.3.3-r0`; the newest published package is `1.3.2-r6`, and upstream zlib has no 1.3.3 release. Tracked at [wolfi-dev/os#78741](https://github.com/wolfi-dev/os/issues/78741). | 2026-09-16 |
+| [CVE-2026-85091](https://avd.aquasec.com/nvd/cve-2026-85091) | zlib | MEDIUM | A fixed package now exists - Wolfi shipped `1.3.2.1_rc20260601-r0` on 2026-09-16, an RC cut from upstream's develop branch with the patch applied. Scanner databases lag the feed by 24-48 hours, so they still flag images that already carry the fix. This entry is a bridge over that lag and will be removed once scans come back clean. Background: [wolfi-dev/os#78741](https://github.com/wolfi-dev/os/issues/78741). | 2026-09-23 |
 
 Scanning these images yourself will surface the entry above, because the
 vulnerability is genuinely present - it is unfixed everywhere, not hidden here.
 Anything else your scanner reports as fixable is a bug in ours; please open an
 issue.
+
+**If this breaks your pipeline**, the behaviour differs by scanner, and the
+difference matters:
+
+| Scanner | Reported severity | Typical gate that fails |
+|---|---|---|
+| Trivy | MEDIUM | `--ignore-unfixed --severity MEDIUM,HIGH,CRITICAL` |
+| Grype | **High** | any gate at HIGH or above |
+
+Grype escalates this above Trivy, so a HIGH threshold that passes under Trivy
+can still fail under Grype. EPSS is 0.4% (37th percentile), so real-world
+exploitation likelihood is low.
+
+Exposure is identical to upstream `cgr.dev/chainguard/wolfi-base`, which carries
+the same finding - using these images does not add it. Suppress it in your own
+scanner the same way we do, and remove the entry when upstream zlib ships 1.3.3:
+
+```yaml
+# .trivyignore.yaml
+vulnerabilities:
+  - id: CVE-2026-85091
+    statement: "zlib: no fixed package exists upstream or in Wolfi."
+    expired_at: 2026-09-23
+```
+
+```yaml
+# .grype.yaml
+ignore:
+  - vulnerability: CVE-2026-85091
+  - vulnerability: GHSA-g5fp-32jq-cfw2
+```
+
+Grype matches this under both identifiers, so suppressing only the CVE leaves
+the GHSA reported.
 
 ## Current Language Versions
 
