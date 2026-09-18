@@ -248,7 +248,7 @@ jobs:
 
       - name: Build Docker Image for ${{ matrix.platform }}
         id: build
-        uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7.3.0
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
         with:
           pull: true
           file: Dockerfile.${{ needs.generate-matrix.outputs.image-base-name }}
@@ -336,12 +336,17 @@ jobs:
           ignore-unfixed: true
           vuln-type: "os,library"
           severity: "CRITICAL,HIGH,MEDIUM"
+          # Narrow, evidence-backed, expiring exceptions only. Entries carry an
+          # expired_at date, so an exception that is not deliberately renewed
+          # stops applying and this gate fails closed on its own. See the file
+          # for the standard an entry has to meet.
+          trivyignores: .trivyignore.yaml
 
       # Push image only after all tests and security scans pass
       - name: Push Docker Image for ${{ matrix.platform }}
         id: push
         if: github.event_name == 'push' && github.ref_type == 'tag' && steps.image_exists.outputs.image_exists != 'true'
-        uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7.3.0
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
         with:
           file: Dockerfile.${{ needs.generate-matrix.outputs.image-base-name }}
           platforms: ${{ matrix.platform }}

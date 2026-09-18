@@ -1,14 +1,26 @@
 # Use a minimal, security-focused base image (Wolfi)
 # Pinned digest ensures reproducibility and supply chain security
-FROM cgr.dev/chainguard/wolfi-base:latest@sha256:918a593b8268c222afd4e2c4f06860ac984e60719b4697e4c71d796bc8fcd042
+FROM cgr.dev/chainguard/wolfi-base:latest@sha256:1d95114038f76513a9ace6fca107d5582b08c65981f81f61cb56bf7fd2ef216d
 
 # Define versions as arguments for easier updates and clarity
 ARG MAVEN_VERSION=3.9
 ARG OPENJDK_PACKAGE=openjdk-17
 
 # Install necessary packages, common build tools, create non-root user, and perform cleanup
-# --upgrade ensures latest packages for security (including dependencies)
-RUN apk update && \
+#
+# "apk add --upgrade" only upgrades the packages named below and their
+# dependencies. Everything else the base image ships - busybox, zlib, the base
+# glibc - stays at whatever the pinned digest carried, so a rebuild reproduced
+# the same vulnerable packages and the daily scan found them again. A full
+# "apk upgrade" is what actually refreshes those.
+#
+# The base image records exact "pkg=version" constraints in /etc/apk/world, which
+# makes a plain "apk upgrade" a no-op for those packages: the solver honours the
+# pin and leaves them behind. Relaxing the exact pins to bare names first is what
+# allows security updates to actually apply. Verified on apk-tools 2 and 3.
+# The "=[0-9]" anchor deliberately leaves fuzzy "=~" pins (e.g. nodejs=~24) alone.
+RUN sed -i -E 's/=[0-9].*$//' /etc/apk/world && \
+    apk update && apk upgrade --no-cache && \
     apk add --no-cache --upgrade \
         # Core Java/Maven stack
         ${OPENJDK_PACKAGE} \
