@@ -136,7 +136,7 @@ removed once scanners agreed.
 
 * **Go**: 1.25.x (from chainguard/go:latest)
 * **Node.js**: 24.6.x with npm 11.5.x (from wolfi-base with nodejs/npm packages)
-* **Python**: 3.13.x and 3.14.x (from wolfi-base with python-3.13/python-3.14 packages, includes pip, poetry, uv)
+* **Python**: 3.13.x and 3.14.x (from wolfi-base with python-3.13/python-3.14 packages), bundling **pip**, **Poetry** and **[uv](https://docs.astral.sh/uv/)** - uv is installed from the Wolfi `uv` package and is the fastest path for dependency resolution in downstream builds. Exact versions of all three are recorded in `/tmp/versions.txt` inside each image and published in that image's release notes.
 * **OpenJDK**: 17.x with Maven 3.9.8 (from wolfi-base with openjdk-17 package)
 * **Wolfi Base**: Latest minimal Linux distribution
 * **FIPS 140-3 Base**: CMVP-validated OpenSSL FIPS Provider 3.1.2, certificate #4985, approved mode enforced ([details](./FIPS.md))

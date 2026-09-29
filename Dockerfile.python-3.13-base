@@ -37,7 +37,10 @@ RUN poetry config installer.max-workers 10
 
 # create symlink for correct PYTHONPATH for poetry
 SHELL ["/bin/ash", "-o", "pipefail", "-c"]
-RUN python3 --version 2>&1 | awk -F' ' '{print $2}' | tr -d '\n' | sed 's/\.[0-9]$//' > /tmp/python_minor_version.txt && \
+# sed -E with [0-9]+, not [0-9]: a single-digit class only strips patch
+# versions 0-9, so 3.13.14 came out as "3.13.14" instead of "3.13", and
+# 3.14 would break the same way at 3.14.10.
+RUN python3 --version 2>&1 | awk -F' ' '{print $2}' | tr -d '\n' | sed -E 's/\.[0-9]+$//' > /tmp/python_minor_version.txt && \
 PY_VERSION=$(cat /tmp/python_minor_version.txt) && \
 ln -s "/home/nonroot/.local/lib/python${PY_VERSION}" /home/nonroot/.local/lib/python3
 

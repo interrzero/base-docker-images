@@ -17,4 +17,24 @@ USER root
 RUN sed -i -E 's/=[0-9].*$//' /etc/apk/world && \
     apk update && apk upgrade --no-cache
 
+# Record what this image actually contains, the same way every other image in
+# the fleet does. The release pipeline extracts /tmp/versions.txt into the
+# release notes, and an image without one is silently omitted from them.
+# wolfi-base has no language runtime to report, so it records the packages that
+# define it - the ones a consumer inherits and that CVE scans land on.
+SHELL ["/bin/sh", "-o", "pipefail", "-c"]
+# Wolfi uses version-streamed package NAMES (glibc-2.44, openssl-4.0-libcrypto),
+# so stripping a fixed "name-" prefix leaves junk like "2.44-2.44-r7". Capture
+# the trailing <version>-r<release> instead, which is name-agnostic.
+RUN pkgver() { apk info -v 2>/dev/null | grep -E "^$1-[0-9]" | head -n1 | sed -E 's/.*-([0-9][^-]*-r[0-9]+)$/\1/'; }; \
+    { \
+      echo "base=wolfi"; \
+      echo "glibc=$(pkgver glibc)"; \
+      echo "busybox=$(pkgver busybox)"; \
+      echo "zlib=$(pkgver zlib)"; \
+      echo "openssl=$(apk info -v 2>/dev/null | grep -E '^openssl' | head -n1 | sed -E 's/.*-([0-9][^-]*-r[0-9]+)$/\1/')"; \
+    } > /tmp/versions.txt && \
+    chmod 0644 /tmp/versions.txt && \
+    cat /tmp/versions.txt
+
 USER nonroot

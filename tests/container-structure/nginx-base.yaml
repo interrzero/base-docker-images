@@ -21,5 +21,21 @@ fileExistenceTests:
     path: "/etc/nginx/nginx.conf"
     shouldExist: true
 
+  # Generated in the builder stage and copied in, because the final stage is
+  # distroless and cannot run a shell to produce it. If the COPY is ever
+  # dropped this assertion is what catches it.
+  - name: "Version file exists"
+    path: "/tmp/versions.txt"
+    shouldExist: true
+
+fileContentTests:
+  - name: "Version file records the compiled nginx version"
+    path: "/tmp/versions.txt"
+    expectedContents: ["nginx=1\\."]
+
+  - name: "Version file records the headers-more module version"
+    path: "/tmp/versions.txt"
+    expectedContents: ["more_headers="]
+
 metadataTest:
   user: "nginx"
