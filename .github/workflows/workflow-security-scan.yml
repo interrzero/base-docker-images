@@ -55,6 +55,7 @@ jobs:
           #   ghcr.io / pkg-containers.githubusercontent.com - the zizmor container image
           #   api.github.com - SARIF upload to code scanning, and gh issue create
           egress-policy: block
+          disable-telemetry: true
           allowed-endpoints: >
             api.github.com:443
             ghcr.io:443
@@ -92,6 +93,7 @@ jobs:
           #   ghcr.io / pkg-containers.githubusercontent.com - the zizmor container image
           #   api.github.com - SARIF upload to code scanning, and gh issue create
           egress-policy: block
+          disable-telemetry: true
           allowed-endpoints: >
             api.github.com:443
             ghcr.io:443

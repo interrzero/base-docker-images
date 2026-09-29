@@ -175,6 +175,7 @@ jobs:
           # This job only echoes text: no checkout, no network, no other actions.
           # Nothing to allow beyond the runner's own control plane.
           egress-policy: block
+          disable-telemetry: true
           allowed-endpoints: >
             github.com:443
 
