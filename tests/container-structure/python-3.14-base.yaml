@@ -1,0 +1,100 @@
+schemaVersion: 2.0.0
+
+# Test the Python 3.14 base image.
+#
+# This image published with ZERO structure tests until 2026-09-03: no config
+# existed at this path, and the workflow's lookup silently echoed "skipping
+# tests" and published anyway. The workflow now fails on a missing config, so
+# this file is what stands between a broken interpreter and a green release.
+#
+# The filename must stay exactly <image-base-name>.yaml. The lookup is
+# tests/container-structure/${IMAGE_BASE_NAME}.yaml where IMAGE_BASE_NAME comes
+# from the release/<image>/v<version> tag. A near-miss name does not warn, it
+# just never loads - which is precisely how openjdk-17-base went untested.
+commandTests:
+  # Pinned to the minor version deliberately. Asserting a bare "Python 3."
+  # would pass on any 3.x image and defeat the point of a version-specific
+  # base image; the Dockerfile installs python-3.14 explicitly.
+  - name: "Python is 3.14"
+    command: "python3"
+    args: ["--version"]
+    expectedOutput: ["Python 3\\.14\\."]
+
+  # Both symlinks are created in the Dockerfile; a consumer calling plain
+  # "python" must not fall through to a different interpreter.
+  - name: "python resolves to the same 3.14 interpreter"
+    command: "python"
+    args: ["--version"]
+    expectedOutput: ["Python 3\\.14\\."]
+
+  - name: "Pip is available"
+    command: "pip3"
+    args: ["--version"]
+    expectedOutput: ["pip"]
+
+  - name: "Poetry is available"
+    command: "poetry"
+    args: ["--version"]
+    expectedOutput: ["Poetry"]
+
+  - name: "uv is available"
+    command: "uv"
+    args: ["--version"]
+    expectedOutput: ["uv"]
+
+  # Load-bearing regression guard. An earlier CVE remediation deleted the
+  # bundled ensurepip wheel from /usr/share/python-wheels, which broke
+  # "python3 -m venv" for every downstream consumer while every other check
+  # here still passed. Creating a venv is the only assertion that catches it.
+  - name: "python3 -m venv works (ensurepip wheel present)"
+    command: "sh"
+    args: ["-c", "python3 -m venv /tmp/cst-venv && /tmp/cst-venv/bin/python --version"]
+    expectedOutput: ["Python 3\\.14\\."]
+
+  # cryptography is installed from PyPI rather than the distro; import it
+  # rather than trusting that pip reported success at build time.
+  - name: "cryptography imports"
+    command: "python3"
+    args: ["-c", "import cryptography; print('cryptography', cryptography.__version__)"]
+    expectedOutput: ["cryptography "]
+
+  # Removed at the end of the build. If either returns, the apk del regressed
+  # and the image reacquires the curl/libcurl CVE surface.
+  - name: "curl is absent"
+    command: "sh"
+    args: ["-c", "command -v curl || echo ABSENT"]
+    expectedOutput: ["ABSENT"]
+
+  - name: "User is nonroot"
+    command: "whoami"
+    expectedOutput: ["nonroot"]
+
+fileExistenceTests:
+  - name: "Version file exists"
+    path: "/tmp/versions.txt"
+    shouldExist: true
+
+  # ensurepip sources its wheel from here; see the venv test above.
+  - name: "Bundled pip wheel directory is present"
+    path: "/usr/share/python-wheels"
+    shouldExist: true
+
+fileContentTests:
+  - name: "Version file records Python 3.14"
+    path: "/tmp/versions.txt"
+    expectedContents: ["python=3\\.14\\."]
+
+  - name: "Version file records the minor tag"
+    path: "/tmp/versions.txt"
+    expectedContents: ["python_minor_tag=3\\.14"]
+
+  - name: "Version file records the major tag"
+    path: "/tmp/versions.txt"
+    expectedContents: ["python_major_tag=3"]
+
+  - name: "Version file records pip, poetry and uv"
+    path: "/tmp/versions.txt"
+    expectedContents: ["pip=", "poetry=", "uv="]
+
+metadataTest:
+  user: "nonroot"

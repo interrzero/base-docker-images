@@ -2,10 +2,12 @@ schemaVersion: 2.0.0
 
 # Test Python base image functionality
 commandTests:
-  - name: "Python version check"
+  # Pinned to the minor version. A bare "Python 3." passes on any 3.x image,
+  # so it would not notice this image silently becoming a different release.
+  - name: "Python is 3.13"
     command: "python3"
     args: ["--version"]
-    expectedOutput: ["Python 3."]
+    expectedOutput: ["Python 3\\.13\\."]
 
   - name: "User is nonroot"
     command: "whoami"
