@@ -18,3 +18,5 @@ RUN sed -i -E 's/=[0-9].*$//' /etc/apk/world && \
     apk update && apk upgrade --no-cache
 
 USER nonroot
+
+# (probe: temporary no-op to force a build on the native arm64 runner)
