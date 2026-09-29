@@ -34,6 +34,23 @@ RUN ./configure --prefix=/usr/local/nginx \
 # Clean up
 RUN rm -rf nginx nginx.tar.gz extra_module extra_module.tar.gz
 
+# Record what this image contains, the same way every other image in the fleet
+# does. The release pipeline extracts /tmp/versions.txt into the release notes,
+# and an image without one is silently omitted from them.
+#
+# It is written here rather than in the final stage because that stage is
+# cgr.dev/chainguard/nginx:latest, which is distroless - no shell, so no RUN can
+# generate it there. The values come from the build ARGs above, which are the
+# authoritative source for what was actually compiled.
+RUN { \
+      echo "nginx=${NGINX_VERSION}"; \
+      echo "nginx_major_tag=$(echo "${NGINX_VERSION}" | cut -d. -f1)"; \
+      echo "nginx_minor_tag=$(echo "${NGINX_VERSION}" | cut -d. -f1-2)"; \
+      echo "more_headers=${MORE_HEADERS_VERSION}"; \
+    } > /tmp/versions.txt && \
+    chmod 0644 /tmp/versions.txt && \
+    cat /tmp/versions.txt
+
 # Switch back to non-root user
 USER nginx
 
@@ -45,6 +62,10 @@ FROM cgr.dev/chainguard/nginx:latest@sha256:c5b581989f162fca74cfdc54d7e868545599
 
 # Copy compiled modules only if the directory exists
 COPY --from=builder /usr/local/nginx/modules/*.so /var/lib/nginx/modules/
+
+# Carry the version record across from the builder. The final stage is
+# distroless, so this cannot be generated here.
+COPY --from=builder /tmp/versions.txt /tmp/versions.txt
 
 # Health Check
 HEALTHCHECK --interval=30s --timeout=3s \

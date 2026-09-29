@@ -46,10 +46,23 @@ runs:
         echo "Platform: $platform"
         echo "Output file: $output_file"
 
-        # Only extract versions for language-specific images
-        if [[ "$image_base_name" == "python-3.13-base" || "$image_base_name" == "nodejs-24-base" || "$image_base_name" == "openjdk-17-base" || "$image_base_name" == "go-1.25-base" ]]; then
+        # Extract from any image that actually ships /tmp/versions.txt, rather
+        # than from a hardcoded list of image names.
+        #
+        # The list this replaces named four images and had drifted: three more
+        # ship the file and were silently excluded. python-3.14-base is the one
+        # that mattered - a language image whose versions.txt carries python,
+        # pip, poetry and uv versions, added to the fleet but never added here,
+        # so its release notes have never included them. fips-140-3 and
+        # fips-base also record fips_module_version and fips_certificate, which
+        # are worth publishing.
+        #
+        # Asking the image whether it has the file cannot drift. An image that
+        # does not ship one is reported and skipped, which is a real answer
+        # rather than an absence of one.
+        if docker run --rm --platform "$platform" "$test_tag" test -f /tmp/versions.txt 2>/dev/null; then
             echo "Attempting to extract versions from $test_tag for $image_base_name"
-            
+
             # Extract versions from the container
             if docker run --rm --platform "$platform" "$test_tag" sh -c 'cat /tmp/versions.txt && exit 0 || exit 1' > "$output_file"; then
                 if [ -s "$output_file" ]; then
@@ -66,7 +79,7 @@ runs:
                 rm -f "$output_file"
             fi
         else
-            echo "No version extraction needed for $image_base_name."
+            echo "$image_base_name does not ship /tmp/versions.txt - nothing to extract."
         fi
 
         echo "extraction_success=$extraction_status" >> $GITHUB_OUTPUT

@@ -26,5 +26,21 @@ fileExistenceTests:
     path: "/bin/sh"
     shouldExist: true
 
+  # Every image in the fleet ships this. The release pipeline extracts it into
+  # the release notes, and an image without one is silently omitted from them -
+  # which is exactly how this image went unreported.
+  - name: "Version file exists"
+    path: "/tmp/versions.txt"
+    shouldExist: true
+
+fileContentTests:
+  - name: "Version file identifies the base"
+    path: "/tmp/versions.txt"
+    expectedContents: ["base=wolfi"]
+
+  - name: "Version file records the packages consumers inherit"
+    path: "/tmp/versions.txt"
+    expectedContents: ["glibc=", "busybox=", "zlib="]
+
 metadataTest:
   user: "nonroot"
