@@ -124,7 +124,7 @@ jobs:
             modified_dockerfile=$(git diff --name-only "$PR_BASE_SHA" "$HEAD_SHA" | grep "^Dockerfile\\." | head -n 1)
             if [ -n "$modified_dockerfile" ]; then
               detected_image="${modified_dockerfile#Dockerfile.}"
-              if [[ "$detected_image" == "go-base" || "$detected_image" == "nodejs-base" || "$detected_image" == "python-base" || "$detected_image" == "fips-base" ]]; then
+              if [[ "$detected_image" == "go-base" || "$detected_image" == "nodejs-base" || "$detected_image" == "python-base" ]]; then
                 echo "PR modifies a deprecated image ($detected_image). Halting build for this image."
                 echo "dockerfile_found=false" >> "$GITHUB_OUTPUT"
                 echo "tag=$GITHUB_REF_NAME_FULL" >> "$GITHUB_OUTPUT"
@@ -167,7 +167,15 @@ jobs:
   publish_image:
     needs: generate-matrix
     if: needs.generate-matrix.outputs.is_deprecated != 'true'
-    runs-on: ubuntu-latest
+    # Each architecture builds on a runner of its own architecture. Emulating
+    # arm64 on an amd64 runner was costing far more than it looked: measured
+    # across recent publishes, the arm64 leg took 3621s for fips-base and 4161s
+    # for fips-140-3 against 319s and 304s for amd64, because both compile
+    # OpenSSL from source under QEMU. The two FIPS images alone accounted for
+    # roughly 72% of all arm64 runner time, every day.
+    #
+    # ubuntu-24.04-arm is free for public repositories, which this is.
+    runs-on: ${{ matrix.runner }}
     outputs:
       version: ${{ steps.context.outputs.version-no-build }}
       has-version-tags: ${{ steps.context.outputs.has-version-tags }}
@@ -177,9 +185,16 @@ jobs:
       GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       TAG: ${{ needs.generate-matrix.outputs.tag }}
     strategy:
+      # Independent legs. One architecture failing must not cancel the other
+      # and hide its logs; nothing publishes until both have passed anyway,
+      # because the manifest is composed from both digests.
       fail-fast: false
       matrix:
-        platform: [linux/amd64, linux/arm64]
+        include:
+          - platform: linux/amd64
+            runner: ubuntu-latest
+          - platform: linux/arm64
+            runner: ubuntu-24.04-arm
     permissions:
       contents: write        # create the GitHub release for the tag
       packages: write        # push image layers and tags to GHCR
@@ -312,7 +327,7 @@ jobs:
 
       - name: Build Docker Image for ${{ matrix.platform }}
         id: build
-        uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7.3.0
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
         with:
           pull: true
           file: Dockerfile.${{ needs.generate-matrix.outputs.image-base-name }}
@@ -362,12 +377,24 @@ jobs:
           # independently downloaded binary. The GCS bucket only serves
           # "latest", so the pinned artifact comes from the GitHub release.
           CST_VERSION: v1.22.1
-          CST_SHA256: fa35e89512a8978585f76cf41397956d2e3a30c62c2ad3fb857b1597074d14ca
+          # Both architectures are pinned, from the release's published
+          # checksums.txt. The binary has to match the RUNNER's architecture,
+          # not the image being built, so this follows matrix.platform now that
+          # the arm64 leg runs on a native arm64 runner. Downloading the amd64
+          # binary there would fail to execute.
+          CST_SHA256_AMD64: fa35e89512a8978585f76cf41397956d2e3a30c62c2ad3fb857b1597074d14ca
+          CST_SHA256_ARM64: 801826ed107222120eb6df8c143b7de752cfebbe3aebfeea576e7098486917c2
+          PLATFORM: ${{ matrix.platform }}
         run: |
           set -euo pipefail
-          url="https://github.com/GoogleContainerTools/container-structure-test/releases/download/${CST_VERSION}/container-structure-test-linux-amd64"
+          case "$PLATFORM" in
+            linux/amd64) cst_arch=amd64; cst_sha="$CST_SHA256_AMD64" ;;
+            linux/arm64) cst_arch=arm64; cst_sha="$CST_SHA256_ARM64" ;;
+            *) echo "::error::No container-structure-test checksum pinned for $PLATFORM" >&2; exit 1 ;;
+          esac
+          url="https://github.com/GoogleContainerTools/container-structure-test/releases/download/${CST_VERSION}/container-structure-test-linux-${cst_arch}"
           curl -fsSL -o container-structure-test "$url"
-          echo "${CST_SHA256}  container-structure-test" | sha256sum -c -
+          echo "${cst_sha}  container-structure-test" | sha256sum -c -
           chmod +x container-structure-test
           sudo mv container-structure-test /usr/local/bin/container-structure-test
           container-structure-test version
@@ -415,12 +442,17 @@ jobs:
           ignore-unfixed: true
           vuln-type: "os,library"
           severity: "CRITICAL,HIGH,MEDIUM"
+          # Narrow, evidence-backed, expiring exceptions only. Entries carry an
+          # expired_at date, so an exception that is not deliberately renewed
+          # stops applying and this gate fails closed on its own. See the file
+          # for the standard an entry has to meet.
+          trivyignores: .trivyignore.yaml
 
       # Push image only after all tests and security scans pass
       - name: Push Docker Image for ${{ matrix.platform }}
         id: push
         if: github.event_name == 'push' && github.ref_type == 'tag' && steps.image_exists.outputs.image_exists != 'true'
-        uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7.3.0
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
         with:
           file: Dockerfile.${{ needs.generate-matrix.outputs.image-base-name }}
           platforms: ${{ matrix.platform }}

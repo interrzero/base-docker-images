@@ -1,0 +1,22 @@
+# Trivy ignore file - narrow, evidence-backed, and expiring.
+#
+# POLICY: this repository publishes images with no *fixable* CVEs. An entry may
+# only be added here when a fix genuinely does not exist, never to defer work on
+# one that does. Every entry carries an expiry so the gate fails closed by
+# itself; renewing one is a deliberate decision, not a default.
+
+# No active exceptions.
+#
+# CVE-2026-85091 (zlib) was suppressed here from 2026-09-14 to 2026-09-26 while
+# Wolfi's security metadata named a fixed version, 1.3.3-r0, that had never been
+# published. Chainguard resolved it on 2026-09-16 by cutting an RC from
+# upstream's develop branch with the fix applied (zlib 1.3.2.1_rc20260601-r0)
+# and repointing the feed at it. Scanner databases caught up a few days later
+# and all published images now scan clean with no suppression at all.
+#
+# Kept as an empty file rather than deleted so the policy above, and the wiring
+# in the publish gate and the daily scan, stay in place. A future exception is
+# then a scoped addition under a stated standard, not a fresh argument about
+# whether suppressions are acceptable.
+
+vulnerabilities: []

@@ -1,0 +1,42 @@
+# zizmor configuration
+#
+# Suppressions here are deliberate and narrow. Each one records why the finding
+# is not actionable *yet*, with the condition that would let it be removed.
+
+rules:
+  # self-repository: new in zizmor 1.30.0. It asks that in-repo composite
+  # actions be referenced as "$/.github/actions/foo" rather than
+  # "./.github/actions/foo". GitHub shipped the "$/" form on 2026-07-30; it
+  # resolves the action at the commit being executed instead of from the
+  # runner's working tree, so it cannot be influenced by a step that mutated
+  # the checkout first.
+  #
+  # That is a real, if modest, hardening and it should be adopted eventually.
+  # It is suppressed today because the local toolchain cannot parse "$/", and
+  # this repository requires workflows to be exercised locally before they are
+  # committed:
+  #
+  #   actionlint  -> "invalid format because ref is missing" (exit 1, all refs)
+  #   act         -> "Expected format {org}/{repo}[/path]@ref" (job fails)
+  #
+  # Upgrading does not help. act's newest release, v0.2.89 (2026-06-01),
+  # predates the syntax by two months, so no published version understands it.
+  #
+  # Adopting "$/" now would silence this audit at the cost of making the
+  # publish pipeline - the workflow with packages:write, id-token:write and
+  # attestations:write - impossible to test locally. That trade is not worth
+  # a low-severity finding with no exploit path here: these actions live in
+  # this repository and are already loaded from the same commit.
+  #
+  # REMOVE THIS SUPPRESSION when act ships "$/" support. Re-check with:
+  #   act push -W .github/workflows/publish-base-images.yml --dryrun
+  # after rewriting one reference. If it resolves, convert all of them and
+  # delete this block.
+  #
+  # Ignores are per-file and support no wildcards, so a NEW workflow using
+  # "./.github/actions/..." will be flagged rather than silently covered.
+  # That is intended: it forces this decision to be made again, not inherited.
+  self-repository:
+    ignore:
+      - publish-base-images.yml
+      - daily-scan-and-rebuild.yml

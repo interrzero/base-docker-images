@@ -1,0 +1,10 @@
+# actionlint configuration.
+#
+# actionlint validates runs-on against a list of runner labels baked into the
+# binary. That list predates GitHub's hosted arm64 runners, so it reports
+# ubuntu-24.04-arm as unknown even though the label is generally available and
+# free for public repositories. Declaring it here keeps local runs clean
+# without weakening the check for genuinely mistyped labels.
+self-hosted-runner:
+  labels:
+    - ubuntu-24.04-arm
