@@ -119,6 +119,11 @@ jobs:
           fi
           echo "Processing image base names: $IMAGE_BASE_NAMES"
 
+          # A scan that cannot run must not pass silently. Counted here and
+          # asserted after every image has been processed, so one unreadable
+          # image still produces a full report instead of aborting the sweep.
+          scan_failures=0
+
           for base_name in $IMAGE_BASE_NAMES; do
             echo "=== Processing image base name: $base_name ==="
             found_fixable_vulns_for_base=false
@@ -136,30 +141,49 @@ jobs:
                 continue # Skip to next platform
               fi
 
-              echo "Scanning $full_image_tag for vulnerabilities (severities: ${TRIGGER_SEVERITIES})"
-              # Run Trivy vulnerability scan
-              # Honour the same expiring exception file as the publish gate.
-              # Without this the scan keeps reporting a CVE that has no
-              # available fix, and pushes a rebuild tag every day that the
-              # publish gate then rejects - churn that looks like activity.
+              # The platform must be explicit. This runner is amd64, and Trivy
+              # defaults to linux/amd64, so scanning a -linux-arm64 image
+              # without this fails with "no child with platform linux/amd64 in
+              # index" - the arm64 index has no amd64 child to select.
+              scan_platform="$(echo "$platform_suffix" | tr '-' '/')"
+
+              echo "Scanning $full_image_tag ($scan_platform) for vulnerabilities (severities: ${TRIGGER_SEVERITIES})"
+              # Honour the same exception file as the publish gate. Without this
+              # the scan reports a CVE that has no available fix and pushes a
+              # rebuild tag every day that the publish gate then rejects -
+              # churn that looks like activity.
+              scan_log="$(mktemp)"
               if trivy image \
+                --platform "$scan_platform" \
+                --scanners vuln \
                 --ignore-unfixed \
                 --ignorefile .trivyignore.yaml \
                 --exit-code 1 \
                 --severity "$TRIGGER_SEVERITIES" \
                 --format table \
-                "$full_image_tag"; then
+                "$full_image_tag" > "$scan_log" 2>&1; then
+                cat "$scan_log"
                 echo "[OK] No fixable vulnerabilities found in $full_image_tag"
               else
                 scan_exit_code=$?
-                if [ $scan_exit_code -eq 1 ]; then
+                cat "$scan_log"
+                # Trivy exits 1 both for findings AND for a fatal error, so the
+                # exit code alone cannot tell them apart. Without this check a
+                # crashed scan was reported as "fixable vulnerabilities found":
+                # every arm64 image was falsely flagged daily and added to the
+                # rebuild list, because the scan could not read it at all.
+                if grep -q "FATAL" "$scan_log"; then
+                  echo "::error::Trivy could not scan $full_image_tag - this is a scan failure, not a vulnerability"
+                  scan_failures=$((scan_failures + 1))
+                elif [ "$scan_exit_code" -eq 1 ]; then
                   echo "[WARN] Fixable vulnerabilities found in $full_image_tag"
                   found_fixable_vulns_for_base=true
                 else
-                  echo "[FAIL] Trivy scan failed for $full_image_tag (exit code: $scan_exit_code)"
-                  # Continue processing other platforms
+                  echo "::error::Trivy scan failed for $full_image_tag (exit code: $scan_exit_code)"
+                  scan_failures=$((scan_failures + 1))
                 fi
               fi
+              rm -f "$scan_log"
             done # End platform loop
 
             # Check if we need to rebuild based on vulnerabilities + base image freshness
@@ -224,6 +248,16 @@ jobs:
 
             echo "Decision for $base_name: $rebuild_reason"
           done # End base_name loop
+
+          # Fail the job if any image could not be scanned. A scan that cannot
+          # run tells us nothing about that image, and treating silence as
+          # "clean" is how the arm64 images went unscanned while still being
+          # reported on every day. Asserted after the sweep so the log still
+          # shows every image before the job stops.
+          if [ "$scan_failures" -ne 0 ]; then
+            echo "::error::${scan_failures} image(s) could not be scanned. Their vulnerability status is UNKNOWN, not clean."
+            exit 1
+          fi
 
           # Process rebuild list
           unique_needs_rebuild=$(echo "$needs_rebuild_list" | xargs -n1 | sort -u | xargs)
