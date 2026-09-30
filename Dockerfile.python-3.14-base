@@ -24,6 +24,36 @@ ENV POETRY_HOME=/home/nonroot \
 RUN python3 -m ensurepip --user --upgrade && \
     python3 -m pip install --no-cache-dir --upgrade --user -v pip poetry cryptography virtualenv
 
+# Remove virtualenv's superseded seed wheels and correct its declared inventory.
+#
+# virtualenv bundles one pip/setuptools pair per supported Python version under
+# virtualenv/seed/wheels/embed. The pair for an older interpreter stays at its
+# original version and keeps its original CVEs - verified here as pip 26.0.1
+# (CVE-2026-13346, CVE-2026-3219, CVE-2026-6357, CVE-2026-8643) and setuptools
+# 82.0.1 (CVE-2026-59890), sitting beside the current pip 26.2.1 and setuptools
+# 84.0.0. This image ships a single Python version, so the old pair can never be
+# selected, but it is still present for a scanner to find.
+#
+# Upgrading does not help: virtualenv 21.14.0, the current release, bundles the
+# same pair, and virtualenv cannot be dropped because poetry imports it.
+# Deleting the wheels alone does not help either - virtualenv ships its own
+# CycloneDX SBOM and RECORD, which is the inventory scanners read, and which is
+# why the finding is reported with no file path. The script does both, in that
+# order, and fails the build if either surface still references a removed
+# version. Nothing is version-pinned: it keeps the highest version of each
+# project and removes the rest, so a future stale wheel needs no edit here.
+#
+# Run twice deliberately. The second run must be a no-op and exit 0; that is the
+# idempotency check, and it fails the build here rather than in a later rebuild.
+COPY --chown=nonroot:nonroot scripts/harden-virtualenv-seeds.py /tmp/harden-virtualenv-seeds.py
+RUN python3 /tmp/harden-virtualenv-seeds.py && \
+    find /home/nonroot/.local/lib -path '*seed/wheels/embed/*' -name '*.whl' | sort > /tmp/seeds.first && \
+    python3 /tmp/harden-virtualenv-seeds.py && \
+    find /home/nonroot/.local/lib -path '*seed/wheels/embed/*' -name '*.whl' | sort > /tmp/seeds.second && \
+    diff /tmp/seeds.first /tmp/seeds.second && \
+    echo "idempotent: second run changed nothing" && \
+    rm -f /tmp/harden-virtualenv-seeds.py /tmp/seeds.first /tmp/seeds.second
+
 # Raise pip's own bundled dependencies to their fixed versions:
 # msgpack 1.1.2 -> 1.2.1 (GHSA-6v7p-g79w-8964) and pkg_resources removed
 # (CVE-2025-47273, CVE-2026-59890 - setuptools dropped it in 82.0.0).
