@@ -461,6 +461,19 @@ jobs:
           PLATFORM: ${{ matrix.platform }}
         run: ./scripts/check-virtualenv-seeds.sh "$IMAGE_REF" "$PLATFORM"
 
+      # Independent of any CVE database. Our scanner has repeatedly been blind
+      # to real content - it does not index the Go toolchain or npm's bundled
+      # node_modules, and missed virtualenv's seed wheels - so "Trivy found
+      # nothing" is not evidence an image is current. This asks apk directly
+      # whether anything installed is older than the repository offers, which
+      # needs no advisory data and cannot drift: it enumerates what is actually
+      # installed rather than consulting a maintained list.
+      - name: Check package freshness for ${{ matrix.platform }}
+        env:
+          IMAGE_REF: ${{ steps.test_image.outputs.image_ref }}
+          PLATFORM: ${{ matrix.platform }}
+        run: ./scripts/check-package-freshness.sh "$IMAGE_REF" "$PLATFORM"
+
       # Push image only after all tests and security scans pass
       - name: Push Docker Image for ${{ matrix.platform }}
         id: push
