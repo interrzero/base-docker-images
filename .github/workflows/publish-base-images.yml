@@ -450,6 +450,17 @@ jobs:
           # for the standard an entry has to meet.
           trivyignores: .trivyignore.yaml
 
+      # Gate on the built artifact, before it is pushed, so a regression cannot
+      # be published. virtualenv bundles one pip/setuptools pair per supported
+      # Python version and the pair for an older interpreter keeps its original
+      # CVEs; harden-virtualenv-seeds.py removes it at build time and this
+      # asserts the result. Images without virtualenv pass trivially.
+      - name: Check virtualenv seed wheels for ${{ matrix.platform }}
+        env:
+          IMAGE_REF: ${{ steps.test_image.outputs.image_ref }}
+          PLATFORM: ${{ matrix.platform }}
+        run: ./scripts/check-virtualenv-seeds.sh "$IMAGE_REF" "$PLATFORM"
+
       # Push image only after all tests and security scans pass
       - name: Push Docker Image for ${{ matrix.platform }}
         id: push
