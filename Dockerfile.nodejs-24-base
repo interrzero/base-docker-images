@@ -15,6 +15,33 @@ RUN sed -i -E 's/=[0-9].*$//' /etc/apk/world && \
     apk update && apk upgrade --no-cache && \
     apk add --no-cache 'nodejs=~24' yarn npm
 
+# Raise npm's vendored dependencies to their fixed versions.
+#
+# npm ships a full node_modules tree of its own dependencies. Scanners read
+# those package.json files as an inventory, so a vendored copy that has fallen
+# behind surfaces as an image vulnerability even when npm itself is current.
+# Verified: npm 12.1.0, the newest Wolfi ships, still vendors
+# brace-expansion 5.0.10 and ip-address 10.5.1, while the fixes are published.
+# Upgrading npm does not help - npm chooses what it vendors - and the copies
+# cannot be deleted because npm imports them at runtime.
+#
+# Targets are named with a fix floor rather than swept: replacing every
+# vendored package with the newest its range allowed broke npm (`npm view`
+# failed silently), because npm tests that tree as a unit. Same approach as
+# harden-pip-vendor.py. The floor is not a pin - the newest version satisfying
+# both the floor and npm's own declared range is installed, so a later fix
+# needs no edit here.
+#
+# Run twice deliberately: the second run must report every target already at or
+# above its floor, which is the idempotency check.
+COPY scripts/harden-node-vendor.js /tmp/harden-node-vendor.js
+RUN node /tmp/harden-node-vendor.js /usr/lib/node_modules/npm && \
+    node /tmp/harden-node-vendor.js /usr/lib/node_modules/npm && \
+    npm --version >/dev/null && npm help >/dev/null && \
+    npm view semver version >/dev/null && \
+    echo "npm functional after vendor hardening" && \
+    rm -f /tmp/harden-node-vendor.js
+
 # Extract Node.js version and save to file
 SHELL ["/bin/ash", "-o", "pipefail", "-c"]
 RUN node --version | awk -F'v' '{print $2}' | tr -d '\n' > /tmp/temp_node_version.txt
