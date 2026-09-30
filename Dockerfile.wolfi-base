@@ -38,3 +38,5 @@ RUN pkgver() { apk info -v 2>/dev/null | grep -E "^$1-[0-9]" | head -n1 | sed -E
     cat /tmp/versions.txt
 
 USER nonroot
+
+# (probe: temporary no-op to force a build so the freshness guard runs in CI)
