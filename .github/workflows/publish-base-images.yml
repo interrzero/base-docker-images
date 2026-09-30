@@ -461,6 +461,22 @@ jobs:
           PLATFORM: ${{ matrix.platform }}
         run: ./scripts/check-virtualenv-seeds.sh "$IMAGE_REF" "$PLATFORM"
 
+      # Same gate for npm's vendored dependency tree. npm ships a full
+      # node_modules of its own dependencies and scanners read those
+      # package.json files as an inventory, so a vendored copy below its fix
+      # floor is a published vulnerability. Our own scanners do not index that
+      # tree - trivy and grype both return zero against it - so the step above
+      # and the Trivy scan before it would both pass a regression here.
+      #
+      # The guard also exercises npm itself, because raising a vendored package
+      # can break npm even when every version stays inside the range npm
+      # declares. Images without npm pass trivially.
+      - name: Check npm vendored dependencies for ${{ matrix.platform }}
+        env:
+          IMAGE_REF: ${{ steps.test_image.outputs.image_ref }}
+          PLATFORM: ${{ matrix.platform }}
+        run: ./scripts/check-node-vendor.sh "$IMAGE_REF" "$PLATFORM"
+
       # Independent of any CVE database. Our scanner has repeatedly been blind
       # to real content - it does not index the Go toolchain or npm's bundled
       # node_modules, and missed virtualenv's seed wheels - so "Trivy found
