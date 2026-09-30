@@ -1,7 +1,6 @@
 #!/usr/bin/env node
 /**
- * Raise npm's vendored dependencies to the newest version their own declared
- * range allows.
+ * Raise named vendored dependencies of npm to their fixed versions.
  *
  * npm ships a full node_modules tree of its dependencies inside the package.
  * Scanners read those package.json files as an inventory of installed software,
@@ -14,22 +13,35 @@
  * package is already at its newest. Deleting the copies is not an option
  * either: npm imports them at runtime.
  *
- * WHY THIS IS SAFE, and why it is not a pin
- * -----------------------------------------
- * Every replacement stays inside the semver range npm's own dependencies
- * declare for that package. If a dependency asks for "^5.0.2", this installs
- * the newest 5.x the registry offers and nothing else. npm has declared that
- * range compatible, so the upgrade is compatible by npm's own statement rather
- * than by our guess.
+ * WHY A NAMED LIST AND NOT A SWEEP
+ * --------------------------------
+ * Upgrading every vendored package that was behind its own declared range was
+ * tried first and broke npm: `npm view` began failing silently, exit 1 with
+ * nothing in the debug log, while `npm --version` and `npm help` still worked.
+ * All twelve replacements were inside the ranges npm itself declares. npm tests
+ * its vendored tree as a unit, so semver compatibility of an individual member
+ * is not sufficient evidence that the tree still works.
  *
- * Nothing is pinned to a version. The newest satisfying version is resolved
- * from the registry at build time, so a fix published next month is picked up
- * with no edit here, and a package that is already newest is left untouched.
- * Re-running changes nothing and exits 0.
+ * So only packages with a known advisory are touched, each named with the
+ * version that fixes it. harden-pip-vendor.py names its targets for the same
+ * reason. Anything not named is left exactly as npm shipped it.
  *
- * It is deliberately strict: a package whose range cannot be determined, or
- * whose download or verification fails, aborts the build rather than leaving a
- * half-replaced tree or a silently stale copy.
+ * WHY THE FLOOR IS NOT A PIN
+ * --------------------------
+ * The version installed is the newest satisfying BOTH the fix floor and every
+ * range npm's own dependencies declare for that package. A fix published next
+ * month is therefore picked up with no edit here, and a package that has
+ * already reached the floor on its own is left untouched. Re-running changes
+ * nothing and exits 0, which the Dockerfile asserts by running it twice.
+ *
+ * It is deliberately strict: a target that is no longer vendored, one whose
+ * declared range cannot be determined, one where no published version satisfies
+ * both floor and range, or a download that fails verification, all abort the
+ * build rather than leaving a half-replaced tree or a silently stale copy.
+ *
+ * AFTER CHANGING ANYTHING HERE, exercise npm itself - `npm help`, `npm view`
+ * and `npm install` - not just `npm --version`. Only `npm view` caught the
+ * regression above.
  */
 'use strict';
 
