@@ -31,6 +31,7 @@ from __future__ import annotations
 
 import json
 import pathlib
+import re
 import shutil
 import sys
 
@@ -158,6 +159,168 @@ def rewrite_bom(vendor: pathlib.Path, msgpack_version: str) -> None:
     path.write_text(json.dumps(bom, indent=2) + "\n")
 
 
+def _normalize(name: str) -> str:
+    """PEP 503 normalisation, so typing_extensions and typing-extensions match."""
+    return re.sub(r"[-_.]+", "-", name).strip().lower()
+
+
+def read_vendor_pins(vendor: pathlib.Path) -> dict[str, str]:
+    """name -> version, from pip's own vendor.txt.
+
+    vendor.txt is the authority for what pip actually vendors. It is written by
+    pip's vendoring tool from the tree it just installed, whereas bom.cdx.json
+    is generated separately and has been observed disagreeing with it (see
+    reconcile_bom_with_pins). Lines may carry comments or environment markers.
+    """
+    path = vendor / "vendor.txt"
+    if not path.is_file():
+        fail(f"expected {path}")
+
+    pins: dict[str, str] = {}
+    for raw in path.read_text().splitlines():
+        line = raw.split("#", 1)[0].strip()
+        if not line:
+            continue
+        match = re.match(r"^([A-Za-z0-9._-]+)\s*==\s*([^\s;,]+)", line)
+        if match:
+            pins[_normalize(match.group(1))] = match.group(2)
+    if not pins:
+        fail(f"no pinned versions parsed from {path}; refusing to reconcile blind")
+    return pins
+
+
+def reconcile_bom_with_pins(vendor: pathlib.Path) -> list[tuple[str, str, str]]:
+    """Correct any bom.cdx.json component that disagrees with vendor.txt.
+
+    pip ships a CycloneDX BOM of its vendored dependencies, and scanners read it
+    as the inventory of what is installed. It can disagree with what pip
+    actually bundles: verified on pip 26.2.1, which vendors urllib3 2.8.0
+    (pip/_vendor/urllib3/_version.py and vendor.txt both say 2.8.0) while
+    bom.cdx.json still declared 2.7.0. Trivy reported the three urllib3 CVEs
+    fixed in 2.8.0 against an image that did not contain the vulnerable code,
+    with PkgPath null because the finding came from that declaration rather than
+    from any file, and the publish gate blocked every python image for two days.
+
+    This is deliberately generic rather than a list of named packages. It asks
+    only "does the declaration match the pin", so the next package pip
+    misdeclares is corrected with no edit here. A component with no vendor.txt
+    pin is left untouched - absence of a pin is not evidence of a wrong version.
+
+    Idempotent: a BOM that already agrees is rewritten byte-identically, so
+    running twice changes nothing.
+    """
+    path = vendor / "bom.cdx.json"
+    if not path.is_file():
+        # Older pip releases predate the bundled CycloneDX BOM.
+        return []
+
+    pins = read_vendor_pins(vendor)
+    try:
+        bom = json.loads(path.read_text())
+    except json.JSONDecodeError as error:
+        fail(f"{path} is not valid JSON: {error}")
+
+    components = bom.get("components")
+    if not isinstance(components, list):
+        fail(f"unexpected structure in {path}: no components list")
+
+    corrected: list[tuple[str, str, str]] = []
+    purl_swaps: dict[str, str] = {}
+    for component in components:
+        name = str(component.get("name", ""))
+        declared = str(component.get("version", ""))
+        actual = pins.get(_normalize(name))
+        if actual is None or declared == actual:
+            continue
+
+        component["version"] = actual
+        purl = component.get("purl")
+        if isinstance(purl, str) and "@" in purl:
+            purl_swaps[purl] = f"{purl.split('@', 1)[0]}@{actual}"
+        corrected.append((name, declared, actual))
+
+    if purl_swaps:
+        # The stale purl also appears in bom-ref and in the dependencies graph
+        # (ref and dependsOn), and bom-ref embeds it in a decorated form such as
+        # "pkg:pypi/pip@26.2.1#vendored/pkg:pypi/urllib3@2.7.0". Substituting on
+        # the serialised document fixes every occurrence at once; a purl is
+        # specific enough that this cannot collide with another component.
+        text = json.dumps(bom, indent=2)
+        for old, new in purl_swaps.items():
+            text = text.replace(old, new)
+        bom = json.loads(text)
+
+    path.write_text(json.dumps(bom, indent=2) + "\n")
+    return corrected
+
+
+def verify_bom_agrees(vendor: pathlib.Path) -> None:
+    """Fail if any BOM component still disagrees with vendor.txt."""
+    path = vendor / "bom.cdx.json"
+    if not path.is_file():
+        return
+    pins = read_vendor_pins(vendor)
+    bad = []
+    for component in json.loads(path.read_text()).get("components", []):
+        name = str(component.get("name", ""))
+        declared = str(component.get("version", ""))
+        actual = pins.get(_normalize(name))
+        if actual is not None and declared != actual:
+            bad.append(f"{name} declared {declared}, pinned {actual}")
+    if bad:
+        fail("bom.cdx.json still disagrees with vendor.txt: " + "; ".join(bad))
+
+
+def verify_corrections_against_disk(
+    corrected: list[tuple[str, str, str]],
+) -> None:
+    """Confirm each corrected version matches the module actually importable.
+
+    reconcile_bom_with_pins trusts vendor.txt, so this closes the loop: if
+    vendor.txt were itself wrong, the reconcile would propagate that into the
+    BOM and the image would still misreport its contents. Verified useful - on
+    pip 26.2.1 the BOM declared urllib3 2.7.0 and idna 3.18 while the importable
+    modules were 2.8.0 and 3.15, so the BOM was wrong in BOTH directions and
+    vendor.txt matched disk for both.
+
+    A vendored module exposing no __version__ is reported and skipped rather
+    than failed: absence of the attribute is a convention difference, not
+    evidence of a wrong version.
+    """
+    if not corrected:
+        return
+
+    import subprocess
+
+    for name, _was, now in corrected:
+        module = name.replace("-", "_")
+        snippet = (
+            f"import pip._vendor.{module} as m; "
+            "import sys; "
+            "v = getattr(m, '__version__', None); "
+            "sys.stdout.write('' if v is None else str(v))"
+        )
+        result = subprocess.run(
+            [sys.executable, "-c", snippet], capture_output=True, text=True
+        )
+        if result.returncode != 0:
+            fail(
+                f"corrected {name} to {now} but pip._vendor.{module} does not "
+                f"import: {result.stderr.strip()}"
+            )
+        on_disk = result.stdout.strip()
+        if not on_disk:
+            print(f"  note: {name} exposes no __version__, disk check skipped")
+            continue
+        if on_disk != now:
+            fail(
+                f"vendor.txt pins {name}=={now} but the importable module is "
+                f"{on_disk}; refusing to write a declaration that disagrees "
+                f"with the code on disk"
+            )
+        print(f"  ok: {name} {now} confirmed against the importable module")
+
+
 def verify(vendor: pathlib.Path, msgpack_version: str) -> None:
     """Confirm the result imports and reports the fixed version."""
     import subprocess
@@ -209,7 +372,19 @@ def main() -> None:
     rewrite_bom(vendor, msgpack_version)
     print("  vendor.txt and bom.cdx.json updated")
 
+    # Must run after the rewrites above, so vendor.txt already carries the
+    # corrected msgpack pin and is a trustworthy authority here.
+    corrected = reconcile_bom_with_pins(vendor)
+    for name, was, now in corrected:
+        print(f"  bom.cdx.json corrected: {name} {was} -> {now} (per vendor.txt)")
+    if not corrected:
+        print("  bom.cdx.json already agrees with vendor.txt")
+
+    verify_corrections_against_disk(corrected)
+
     verify(vendor, msgpack_version)
+    verify_bom_agrees(vendor)
+    print("  ok: bom.cdx.json agrees with vendor.txt")
     print("harden-pip-vendor: done")
 
 
