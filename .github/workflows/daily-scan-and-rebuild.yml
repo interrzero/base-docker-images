@@ -79,7 +79,11 @@ jobs:
 
       - name: Install Trivy scanner
         env:
-          TRIVY_VERSION: "0.72.0"
+          # Kept in step with the publish gate's trivy-action version input.
+          # A scan and a gate on different scanner versions produce different
+          # package attributions for the same image, which made a real
+          # investigation considerably harder than it needed to be.
+          TRIVY_VERSION: "0.75.0"
         run: |
           # Install Trivy (pinned version) and jq for vulnerability scanning
           sudo apt-get update && sudo apt-get install -y jq
