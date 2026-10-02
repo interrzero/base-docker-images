@@ -87,4 +87,119 @@ if [ "${violations}" -ne 0 ]; then
   exit 1
 fi
 
-echo "check-virtualenv-seeds: ok - one seed wheel per project, inventory agrees"
+# Third surface: what is INSIDE each seed wheel.
+#
+# The checks above only compare seed wheels against each other, so a single
+# wheel with no duplicate passes even when the code inside it is vulnerable.
+# That is exactly what happened: virtualenv 21.14.5 bundles a pip 26.2.1 seed
+# wheel vendoring urllib3 2.7.0, while the ensurepip wheel Chainguard ships at
+# /usr/share/python-wheels carries the patched 2.8.0. Every environment made by
+# "virtualenv" or by poetry - which creates its environments through virtualenv
+# - gets the 2.7.0 copy. Measured, not assumed.
+#
+# No scanner here catches it. Trivy does not read inside .whl files, so the
+# image scans clean while shipping the vulnerable code.
+#
+# The reference is the distro wheel of the SAME pip version rather than a list
+# of package names and floors. Chainguard patches that wheel, so the assertion
+# is "the seed wheel must not be behind the wheel we actually trust", and a
+# future patch is picked up with no edit here. Only packages present in both
+# are compared, and only a seed version strictly older than the reference is a
+# finding - a seed wheel ahead of the reference is not.
+echo "  checking seed wheel interiors against the distro wheel"
+interior="$(docker run --rm --platform "${PLATFORM}" --entrypoint python3 "${IMAGE}" -c '
+import glob, io, re, sys, zipfile
+
+def pins(zf, prefix):
+    """name -> version from <dist>/_vendor/vendor.txt inside a wheel."""
+    out = {}
+    for n in zf.namelist():
+        if n.endswith("_vendor/vendor.txt") and n.startswith(prefix + "/"):
+            for raw in zf.read(n).decode("utf8", "ignore").splitlines():
+                line = raw.split("#", 1)[0].strip()
+                m = re.match(r"^([A-Za-z0-9._-]+)\s*==\s*([^\s;,]+)", line)
+                if m:
+                    out[re.sub(r"[-_.]+", "-", m.group(1)).lower()] = m.group(2)
+    return out
+
+def parse(v):
+    return tuple(int(x) for x in re.findall(r"\d+", v)[:4])
+
+# Scoped to real site-packages roots. A recursive glob from / walks /proc and
+# /sys and does not finish inside the step timeout.
+import site
+roots = set(site.getsitepackages() or [])
+try:
+    roots.add(site.getusersitepackages())
+except Exception:
+    pass
+roots.update(glob.glob("/usr/lib/python3*/site-packages"))
+roots.update(glob.glob("/home/*/.local/lib/python3*/site-packages"))
+# Deduplicate by real path: the roots above overlap (site.getsitepackages()
+# and the explicit globs can name the same directory), and without this each
+# finding is reported more than once.
+import os
+seeds = sorted(
+    {
+        os.path.realpath(w)
+        for r in roots
+        for w in glob.glob(r + "/virtualenv/seed/wheels/embed/*.whl")
+    }
+)
+if not seeds:
+    print("SKIP no virtualenv seed wheels")
+    sys.exit(0)
+
+problems = 0
+compared = 0
+for seed in seeds:
+    base = seed.rsplit("/", 1)[-1]
+    dist = base.split("-", 1)[0]
+    refs = glob.glob("/usr/share/python-wheels/" + base)
+    if not refs:
+        print("NOREF %s has no distro wheel of the same version to compare against" % base)
+        continue
+    try:
+        sp = pins(zipfile.ZipFile(seed), dist)
+        rp = pins(zipfile.ZipFile(refs[0]), dist)
+    except Exception as e:
+        print("UNREADABLE %s: %s" % (base, e))
+        problems += 1
+        continue
+    for name, sv in sorted(sp.items()):
+        rv = rp.get(name)
+        if rv is None:
+            continue
+        compared += 1
+        try:
+            behind = parse(sv) < parse(rv)
+        except Exception:
+            behind = sv != rv
+        if behind:
+            print("BEHIND %s vendors %s %s but the distro wheel has %s" % (base, name, sv, rv))
+            problems += 1
+print("COMPARED %d" % compared)
+print("DONE %d" % problems)
+' 2>&1)" || {
+  echo "::error::check-virtualenv-seeds: seed wheel interior check failed to run" >&2
+  printf '  %s\n' "${interior//$'\n'/$'\n'  }" >&2
+  exit 1
+}
+
+printf '  %s\n' "${interior//$'\n'/$'\n'  }"
+
+if ! echo "${interior}" | grep -qE '^(SKIP|DONE) '; then
+  echo "::error::seed wheel interior check did not complete; refusing to report clean" >&2
+  exit 1
+fi
+
+if echo "${interior}" | grep -q '^BEHIND '; then
+  echo "::error::a virtualenv seed wheel vendors a dependency older than the distro wheel of the same version. Every environment created from it inherits that code, and no scanner reads inside a .whl." >&2
+  exit 1
+fi
+if echo "${interior}" | grep -qE '^(UNREADABLE) '; then
+  echo "::error::a virtualenv seed wheel could not be read; refusing to report clean" >&2
+  exit 1
+fi
+
+echo "check-virtualenv-seeds: ok - one seed wheel per project, inventory agrees, interiors not behind the distro wheel"
