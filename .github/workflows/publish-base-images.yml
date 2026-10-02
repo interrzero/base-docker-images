@@ -477,6 +477,22 @@ jobs:
           PLATFORM: ${{ matrix.platform }}
         run: ./scripts/check-node-vendor.sh "$IMAGE_REF" "$PLATFORM"
 
+      # Same gate for pip's bundled CycloneDX BOM. pip ships bom.cdx.json
+      # describing its vendored dependencies and scanners read it as the
+      # inventory, so a stale declaration is reported as an image vulnerability
+      # even when the bundled code is current - and an over-stated one hides a
+      # real finding. Measured on pip 26.2.1: the BOM declared urllib3 2.7.0
+      # against 2.8.0 on disk, and idna 3.18 against 3.15.
+      #
+      # The Trivy step cannot be the backstop here: a misdeclaration produces a
+      # finding with no file path, so it is indistinguishable from a real
+      # vulnerability. Images without python pass trivially.
+      - name: Check pip vendored BOM for ${{ matrix.platform }}
+        env:
+          IMAGE_REF: ${{ steps.test_image.outputs.image_ref }}
+          PLATFORM: ${{ matrix.platform }}
+        run: ./scripts/check-pip-vendor-bom.sh "$IMAGE_REF" "$PLATFORM"
+
       # Independent of any CVE database. Our scanner has repeatedly been blind
       # to real content - it does not index the Go toolchain or npm's bundled
       # node_modules, and missed virtualenv's seed wheels - so "Trivy found
