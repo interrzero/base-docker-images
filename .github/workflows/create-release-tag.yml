@@ -42,16 +42,25 @@ jobs:
           # checkout credential does not need to persist into the work tree.
           persist-credentials: false
 
-      - name: Detect changed Dockerfiles and build matrix
+      - name: Detect images whose build inputs changed
         id: build_matrix
         run: |
+          # An image used to be tagged only when its own Dockerfile changed.
+          # That misses the common case: a Dockerfile COPYs a script, the script
+          # is fixed, the image content changes, the Dockerfile does not - so no
+          # tag was cut and the fix never shipped. That happened for real with
+          # the pip BOM reconcile, which sat unpublished until someone built by
+          # hand while a downstream consumer's required scans stayed red against
+          # the stale image.
+          #
+          # scripts/image-build-inputs.sh derives each image's inputs FROM its
+          # Dockerfile (every local COPY/ADD source) plus its structure test
+          # config, and treats shared gate inputs as affecting every image.
+          # Deriving beats a hand-kept list: a new COPY is covered the day it is
+          # added, with nobody having to remember.
           images_to_build=()
-          # Find all Dockerfiles that are not deprecated
           while IFS= read -r dockerfile; do
-            # Ensure we only check files that exist in the current HEAD
-            if [ ! -f "$dockerfile" ]; then
-              continue
-            fi
+            [ -f "$dockerfile" ] || continue
             image_name="${dockerfile#./Dockerfile.}"
             latest_tag=$(git for-each-ref --sort='-v:refname' --format '%(refname:short)' "refs/tags/release/$image_name" | head -n 1)
 
@@ -61,15 +70,36 @@ jobs:
               continue
             fi
 
-            # Check if the Dockerfile has changed since the last tag
-            if ! git diff --quiet "$latest_tag" HEAD -- "$dockerfile"; then
-              echo "$dockerfile has changed since last tag ($latest_tag), adding to build matrix."
+            changed_input=""
+            while IFS= read -r input_path; do
+              [ -n "$input_path" ] || continue
+              if ! git diff --quiet "$latest_tag" HEAD -- "$input_path"; then
+                changed_input="$input_path"
+                break
+              fi
+            done < <(./scripts/image-build-inputs.sh inputs "$image_name")
+
+            # Shared inputs decide whether ANY image may publish, so a change to
+            # one has to rebuild the fleet rather than silently apply to
+            # whichever image happens to build next.
+            if [ -z "$changed_input" ]; then
+              while IFS= read -r shared_path; do
+                [ -n "$shared_path" ] || continue
+                if ! git diff --quiet "$latest_tag" HEAD -- "$shared_path"; then
+                  changed_input="$shared_path (shared)"
+                  break
+                fi
+              done < <(./scripts/image-build-inputs.sh shared)
+            fi
+
+            if [ -n "$changed_input" ]; then
+              echo "$image_name: $changed_input changed since $latest_tag, adding to build matrix."
               images_to_build+=("$image_name")
             fi
           done < <(find . -maxdepth 1 -name 'Dockerfile.*' ! -name 'deprecated.Dockerfile.*')
 
           if [ ${#images_to_build[@]} -eq 0 ]; then
-            echo "No Dockerfile changes detected."
+            echo "No build inputs changed for any image."
             echo "images_to_build=[]" >> "$GITHUB_OUTPUT"
             echo "has_changes=false" >> "$GITHUB_OUTPUT"
           else
@@ -86,7 +116,7 @@ jobs:
       - name: Exit early if no changes
         if: steps.build_matrix.outputs.has_changes != 'true'
         run: |
-          echo "No Dockerfile changes detected in this commit, exiting."
+          echo "No image build inputs changed in this commit, exiting."
           exit 0
 
   create_release_tags:

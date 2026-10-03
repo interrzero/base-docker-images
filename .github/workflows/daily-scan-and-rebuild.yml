@@ -77,18 +77,28 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Install jq
+        run: sudo apt-get update && sudo apt-get install -y jq
+
+      # Installed through the same SHA-pinned action the publish gate uses
+      # rather than by piping a script fetched from a moving branch into a
+      # shell. The previous step ran
+      # raw.githubusercontent.com/.../trivy/main/contrib/install.sh, so whoever
+      # could change that branch could run arbitrary code in CI, and the script
+      # was not pinned to the release it was installing.
+      #
+      # The version must stay in step with the publish gate's trivy-action
+      # version input: a scan and a gate on different scanner versions produce
+      # different package attributions for the same image, which made a real
+      # investigation considerably harder than it needed to be.
       - name: Install Trivy scanner
-        env:
-          # Kept in step with the publish gate's trivy-action version input.
-          # A scan and a gate on different scanner versions produce different
-          # package attributions for the same image, which made a real
-          # investigation considerably harder than it needed to be.
-          TRIVY_VERSION: "0.75.0"
-        run: |
-          # Install Trivy (pinned version) and jq for vulnerability scanning
-          sudo apt-get update && sudo apt-get install -y jq
-          curl -sfL https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/install.sh | sh -s -- -b /usr/local/bin "v${TRIVY_VERSION}"
-          trivy --version
+        uses: aquasecurity/setup-trivy@81e514348e19b6112ce2a7e3ecbafe19c1e1f567 # v0.3.1
+        with:
+          version: v0.75.0
+          cache: true
+
+      - name: Record the Trivy version in use
+        run: trivy --version
 
       - name: Scan images and determine rebuild requirements
         id: scan_check_rebuild
