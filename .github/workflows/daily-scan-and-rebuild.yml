@@ -43,6 +43,7 @@ jobs:
     permissions:
       contents: write    # Needed to push new tags
       packages: read     # Needed to pull images and inspect manifests
+      issues: write      # Open or update the publish-blocked issue for a stale image
       actions: read      # read prior run metadata when applying the rebuild cooldown
     steps:
       - name: Harden Runner
@@ -347,3 +348,57 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.PAT_TOKEN }}
           INPUT_IGNORE_COOLDOWN: ${{ github.event.inputs.ignore_cooldown }}
+
+      # Dispatching a rebuild is not the same as the rebuild landing. On
+      # 2026-10-02 this job dispatched rebuilds, the publish gate rejected
+      # them, and the published :latest stayed on a nine-day-old build while a
+      # downstream consumer's required scan went red against it - with nothing
+      # reporting that the dispatch had not taken effect.
+      #
+      # This re-checks the CURRENTLY published :latest, which reflects whether
+      # the PREVIOUS dispatch landed. A tag pushed moments ago has not built
+      # yet, so a dirty result here means something is persistently not
+      # shipping, which is exactly the condition that went unnoticed.
+      - name: Verify the published :latest of every image is actually clean
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          REGISTRY_BASE: ghcr.io/${{ github.repository }}
+          TRIGGER_SEVERITIES: ${{ env.TRIGGER_SEVERITIES }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          stale=0
+          while IFS= read -r dockerfile; do
+            [ -f "$dockerfile" ] || continue
+            base_name="${dockerfile#./Dockerfile.}"
+            for arch in amd64 arm64; do
+              ref="${REGISTRY_BASE}/${base_name}-linux-${arch}:latest"
+              log="$(mktemp)"
+              if trivy image --platform "linux/${arch}" --scanners vuln \
+                   --ignore-unfixed --ignorefile .trivyignore.yaml \
+                   --exit-code 1 --severity "$TRIGGER_SEVERITIES" \
+                   --format table "$ref" > "$log" 2>&1; then
+                continue
+              fi
+              # Exit 1 means findings OR a fatal error, and the two need
+              # different responses: a scan that could not read the image is
+              # not evidence that the image is dirty.
+              if grep -q "FATAL" "$log"; then
+                echo "::warning::could not scan ${ref}; not treating as stale"
+                cat "$log"
+                continue
+              fi
+              echo "::error::published ${ref} still has fixable MEDIUM+ findings"
+              cat "$log"
+              stale=$((stale + 1))
+              ./scripts/publish-failure-issue.sh open "$base_name" "$RUN_URL" || true
+              break
+            done
+          done < <(find . -maxdepth 1 -name 'Dockerfile.*' ! -name 'deprecated.Dockerfile.*')
+
+          if [ "$stale" -ne 0 ]; then
+            echo "::error::${stale} image(s) are publishing a :latest that does not pass the gate."
+            exit 1
+          fi
+          echo "[OK] every published :latest passes the gate"
+
