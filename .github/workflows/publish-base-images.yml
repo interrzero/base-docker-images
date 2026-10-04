@@ -514,6 +514,22 @@ jobs:
           PLATFORM: ${{ matrix.platform }}
         run: ./scripts/check-pip-vendor-bom.sh "$IMAGE_REF" "$PLATFORM"
 
+      # Third inventory surface: the distro's own SPDX documents under
+      # /var/lib/db/sbom, which enumerate the dependencies vendored inside each
+      # apk. Scanners read them as the installed inventory, so an entry that
+      # disagrees with the file it names is reported to consumers as fact -
+      # inventing a vulnerability, or hiding a real one behind an overstated
+      # version. The npm apk did exactly this.
+      #
+      # Compares each entry against the very file its sourceInfo names, so
+      # there is no package list to maintain. Images that declare nothing
+      # resolvable say so rather than reporting a clean bill of health.
+      - name: Check distro SBOMs against disk for ${{ matrix.platform }}
+        env:
+          IMAGE_REF: ${{ steps.test_image.outputs.image_ref }}
+          PLATFORM: ${{ matrix.platform }}
+        run: ./scripts/check-apk-sbom-disk.sh "$IMAGE_REF" "$PLATFORM"
+
       # Independent of any CVE database. Our scanner has repeatedly been blind
       # to real content - it does not index the Go toolchain or npm's bundled
       # node_modules, and missed virtualenv's seed wheels - so "Trivy found
