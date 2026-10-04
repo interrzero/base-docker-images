@@ -1024,3 +1024,65 @@ jobs:
               fi
             done
           fi
+
+  # A failed publish used to be visible only as a red run in the Actions tab.
+  # When the python bases were rejected by this gate on 2026-10-02 the
+  # published :latest silently stayed on the previous build for about nine
+  # hours while a downstream consumer's REQUIRED scan went red against it.
+  # Nothing told anyone. These two jobs make the state of each image's publish
+  # visible in the tracker and keep it current without anyone tidying up.
+  report_publish_failure:
+    needs: [generate-matrix, publish_image]
+    if: always() && needs.publish_image.result == 'failure' && github.event_name == 'push' && github.ref_type == 'tag'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      issues: write
+      actions: read
+    steps:
+      - name: Harden Runner
+        uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
+        with:
+          egress-policy: audit
+          disable-telemetry: true
+
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Open or update the publish-blocked issue
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          IMAGE_BASE_NAME: ${{ needs.generate-matrix.outputs.image-base-name }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          RUN_ID: ${{ github.run_id }}
+        run: ./scripts/publish-failure-issue.sh open "$IMAGE_BASE_NAME" "$RUN_URL" "$RUN_ID"
+
+  close_publish_failure_issue:
+    needs: [generate-matrix, publish_image]
+    if: always() && needs.publish_image.result == 'success' && github.event_name == 'push' && github.ref_type == 'tag'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      issues: write
+    steps:
+      - name: Harden Runner
+        uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
+        with:
+          egress-policy: audit
+          disable-telemetry: true
+
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Close the publish-blocked issue if one is open
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          IMAGE_BASE_NAME: ${{ needs.generate-matrix.outputs.image-base-name }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: ./scripts/publish-failure-issue.sh close "$IMAGE_BASE_NAME" "$RUN_URL"
