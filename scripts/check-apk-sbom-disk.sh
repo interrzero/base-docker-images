@@ -32,8 +32,14 @@ PLATFORM="${2:?usage: check-apk-sbom-disk.sh <image-ref> <platform>}"
 
 echo "check-apk-sbom-disk: ${IMAGE} (${PLATFORM})"
 
-cid="$(docker create --platform "${PLATFORM}" "${IMAGE}" 2>/dev/null)" || {
-  echo "::error::could not create a container from ${IMAGE}" >&2
+# A command argument is required even though the container is never started:
+# "docker create" refuses an image that declares neither CMD nor ENTRYPOINT
+# with "no command specified". The FIPS images are exactly that - their only
+# CMD belongs to a HEALTHCHECK - so without this the guard failed to create a
+# container and blocked their publish outright. The placeholder is never
+# executed and does not need to exist in the image.
+cid="$(docker create --platform "${PLATFORM}" "${IMAGE}" true 2>&1)" || {
+  echo "::error::could not create a container from ${IMAGE}: ${cid}" >&2
   exit 1
 }
 trap 'docker rm -f "${cid}" >/dev/null 2>&1 || true' EXIT
