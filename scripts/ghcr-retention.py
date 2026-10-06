@@ -40,6 +40,7 @@ Usage:
 from __future__ import annotations
 
 import argparse
+import base64
 import concurrent.futures
 import datetime as dt
 import json
@@ -316,11 +317,25 @@ def package_versions(org: str, repo: str, package: str, token: str) -> list[Vers
             for v in api_pages(f"/orgs/{org}/packages/container/{name}/versions", token)]
 
 
-def index_children(org: str, repo: str, package: str,
-                   digests: list[str]) -> dict[str, list[str]]:
-    """Fetch each manifest and return the digests it references."""
+def index_children(org: str, repo: str, package: str, digests: list[str],
+                   token: str | None = None) -> dict[str, list[str]]:
+    """Fetch each manifest and return the digests it references.
+
+    The registry pull token is requested WITH credentials when a token is
+    available. An anonymous token only works for packages whose visibility is
+    public, and a private one answers 401 "authentication required" - which
+    reads like a broken script rather than a visibility difference, and shows
+    up only on whichever package happens to be private.
+    """
     scope = f"repository:{org}/{repo}/{package}:pull"
-    token_data, _ = http_json(f"https://{REGISTRY}/token?scope={urllib.parse.quote(scope)}", {})
+    token_headers = {}
+    if token:
+        # The registry's token endpoint takes HTTP Basic; the username is
+        # ignored by GHCR, only the password (the token) is read.
+        basic = base64.b64encode(f"x:{token}".encode()).decode()
+        token_headers["Authorization"] = "Basic " + basic
+    token_data, _ = http_json(
+        f"https://{REGISTRY}/token?scope={urllib.parse.quote(scope)}", token_headers)
     headers = {"Authorization": "Bearer " + token_data["token"], "Accept": MANIFEST_ACCEPT}
 
     def fetch(digest: str) -> tuple[str, list[str]]:
@@ -386,12 +401,12 @@ def main() -> int:
         # Every tagged version is fetched, signature tags included: those can
         # be indexes whose children are live attestation bundles.
         tagged = [v.digest for v in versions if v.tags]
-        children = index_children(args.org, args.repo, package, tagged)
+        children = index_children(args.org, args.repo, package, tagged, token)
         plan = plan_package(package, versions, children, releases, args.today,
                             args.releases, args.days)
         problems += check_invariants(plan, versions)
         orphan_groups = classify_orphans(
-            plan, index_children(args.org, args.repo, package, plan.orphans))
+            plan, index_children(args.org, args.repo, package, plan.orphans, token))
         row = [len(versions), len(plan.keep), len(plan.delete), len(plan.retire),
                len(plan.orphans), len(plan.unknown)]
         totals = [a + b for a, b in zip(totals, row)]
