@@ -1051,6 +1051,12 @@ jobs:
         with:
           persist-credentials: false
 
+      # Needed so the script can compare this tag's gate scripts against main.
+      # A re-run of an old tag runs the guards that existed then and cannot
+      # pass; filing an issue for that misreports a healthy image as blocked.
+      - name: Fetch main for the stale-tag comparison
+        run: git fetch --no-tags --depth=1 origin main:refs/remotes/origin/main || true
+
       - name: Open or update the publish-blocked issue
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -1058,6 +1064,8 @@ jobs:
           IMAGE_BASE_NAME: ${{ needs.generate-matrix.outputs.image-base-name }}
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
           RUN_ID: ${{ github.run_id }}
+          TAG_SHA: ${{ github.sha }}
+          MAIN_REF: origin/main
         run: ./scripts/publish-failure-issue.sh open "$IMAGE_BASE_NAME" "$RUN_URL" "$RUN_ID"
 
   close_publish_failure_issue:
