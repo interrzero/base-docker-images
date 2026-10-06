@@ -31,6 +31,34 @@ REPO="${GH_REPO:-${GITHUB_REPOSITORY:-}}"
 # found by its stable prefix rather than an exact match.
 prefix="${IMAGE}: publish blocked"
 
+# A re-run of an OLD tag cannot be made to pass: the workflow checks out the
+# tag's tree, so it runs whatever guard scripts existed then, not the ones on
+# main. Opening an issue for that misreports a healthy image as blocked - which
+# happened: issue #468 claimed fips-base was blocked while its published image
+# measured clean on both arches, because someone re-ran a tag predating the fix.
+#
+# If every gate script in the tag's tree is an ancestor state of main's - i.e.
+# main has changed them since - the failure is explained by the tag being stale
+# and is not evidence about the current image. Skipped only for "open"; closing
+# is always safe.
+# Compared against MAIN_REF, not HEAD: this job checks out the tag's tree, so
+# HEAD *is* the tag and a self-comparison would always be empty.
+if [ "$MODE" = open ] && [ -n "${TAG_SHA:-}" ] && [ -n "${MAIN_REF:-}" ] \
+   && git rev-parse --verify --quiet "$MAIN_REF" >/dev/null 2>&1; then
+  stale_guards=""
+  for guard in $(git ls-tree -r --name-only "$MAIN_REF" -- scripts 2>/dev/null \
+                 | grep -E '^scripts/(check-.*\.sh|harden-.*\.(py|js))$'); do
+    if ! git diff --quiet "${TAG_SHA}" "${MAIN_REF}" -- "$guard" 2>/dev/null; then
+      stale_guards="${stale_guards} ${guard}"
+    fi
+  done
+  if [ -n "$stale_guards" ]; then
+    echo "skipping issue for ${IMAGE}: the tag's gate scripts differ from ${MAIN_REF} (${stale_guards# })"
+    echo "a re-run of a stale tag runs the old guards and cannot pass; this is not evidence about the published image"
+    exit 0
+  fi
+fi
+
 existing="$(gh issue list --repo "$REPO" --state open --limit 100 \
   --json number,title --jq "[.[] | select(.title | startswith(\"${prefix}\"))] | .[0].number // empty" 2>/dev/null || true)"
 
@@ -64,8 +92,17 @@ case "$MODE" in
     fi
     [ -n "$findings" ] || findings="(could not extract the finding table; see the run log)"
 
-    count="$(printf '%s\n' "$findings" | grep -cE 'CVE-|GHSA-' || true)"
-    title="${prefix} by ${count:-0} fixable MEDIUM+ finding(s)"
+    # Only claim a CVE count when there are actually CVEs. A gate can fail for
+    # reasons that are not findings at all - a guard that could not inspect the
+    # image, a missing structure-test config - and titling those "blocked by 0
+    # fixable MEDIUM+ findings" reads as nonsense and buries the real reason.
+    # Observed for real: issue #468 said exactly that about a healthy image.
+    count="$(printf '%s\n' "$findings" | grep -cE 'CVE-[0-9]|GHSA-' || true)"
+    if [ "${count:-0}" -gt 0 ]; then
+      title="${prefix} by ${count} fixable MEDIUM+ finding(s)"
+    else
+      title="${prefix} by a failing gate check (no CVE findings)"
+    fi
 
     body="$(cat <<BODY
 \`${IMAGE}\` failed its publish gate, so the published \`:latest\` is **stale**
