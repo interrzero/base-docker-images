@@ -1,0 +1,96 @@
+# .github/workflows/ghcr-retention.yml
+name: GHCR Retention Report
+
+# REPORT ONLY. Nothing is deleted and nothing is retagged.
+#
+# GHCR currently holds every release this repository has ever published: 4071
+# release tags across 13 image names, each of which produced two per-arch
+# images plus a multi-arch manifest, and the daily rebuild adds more every day.
+# There is no retention policy, so the first thing needed is not a deletion
+# job but an answer to "what would a policy actually remove".
+#
+# That is what this produces. The job runs the planner, prints a summary and
+# uploads the full per-digest reasoning as an artifact. Choosing the policy,
+# and enabling anything that acts on it, is a separate and deliberate decision
+# for a human: deleting a published image is irreversible and breaks any
+# consumer pinning a digest, and the people affected are not in the room.
+#
+# The permissions below are packages: read, not write, so this workflow could
+# not delete even if the script tried to. scripts/test_ghcr_retention.py
+# asserts the script has no deletion code path, and runs first.
+on:
+  schedule:
+    # Mondays 06:00 UTC, before the weekly security scans.
+    - cron: '0 6 * * 1'
+  workflow_dispatch:
+  pull_request:
+    branches: [main]
+    paths:
+      - scripts/ghcr-retention.py
+      - scripts/test_ghcr_retention.py
+      - .github/workflows/ghcr-retention.yml
+
+permissions:
+  contents: read
+
+# Safe to cancel: a newer commit's report supersedes the previous one.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  report:
+    name: Retention plan (report only)
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: read
+    steps:
+      - name: Harden Runner
+        uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
+        with:
+          # Every endpoint this job reaches is known ahead of time, so unlike
+          # the secret scan this one can run with egress blocked:
+          #   github.com / objects.githubusercontent.com - checkout and actions
+          #   api.github.com - packages API and the release-tag listing
+          #   ghcr.io - registry token and manifest reads
+          egress-policy: block
+          disable-telemetry: true
+          allowed-endpoints: >
+            api.github.com:443
+            ghcr.io:443
+            github.com:443
+            objects.githubusercontent.com:443
+            pkg-containers.githubusercontent.com:443
+
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      # First, so a change that breaks the planner stops here rather than
+      # producing a plausible-looking but wrong report.
+      - name: Unit tests
+        run: python3 scripts/test_ghcr_retention.py
+
+      - name: Retention report
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+        run: |
+          set -o pipefail
+          python3 scripts/ghcr-retention.py --report retention-report.json | tee report.txt
+          {
+            echo '```'
+            cat report.txt
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload retention report
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: retention-report
+          path: retention-report.json
+          retention-days: 90
+          if-no-files-found: warn
