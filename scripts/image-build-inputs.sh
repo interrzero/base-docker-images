@@ -76,6 +76,37 @@ case "${1:-}" in
   shared)
     shared_inputs | sort -u
     ;;
+  owners)
+    # Which images depend on one path? The inverse of "inputs", used by the tag
+    # workflow on a pull request: there the question is "what does THIS PR
+    # touch", and comparing against release tags answers a different question
+    # and selects nearly every image, because main moves between releases.
+    path="${2:?usage: image-build-inputs.sh owners <path>}"
+    path="${path#./}"
+    matched=0
+    while read -r s_path; do
+      [ -n "$s_path" ] || continue
+      if [ "$s_path" = "$path" ]; then
+        # A shared input changes whether ANY image may publish, so it owns all.
+        all_images
+        exit 0
+      fi
+    done < <(shared_inputs)
+    while read -r image; do
+      [ -n "$image" ] || continue
+      while read -r in_path; do
+        [ -n "$in_path" ] || continue
+        if [ "$in_path" = "$path" ]; then
+          echo "$image"
+          matched=1
+          break
+        fi
+      done < <(image_inputs "$image")
+    done < <(all_images)
+    # A path owned by no image (README, docs) prints nothing and exits 0: that
+    # is "no image needs rebuilding", not an error.
+    [ "$matched" -ge 0 ] || true
+    ;;
   affected)
     from="${2:?usage: image-build-inputs.sh affected <from> <to>}"
     to="${3:?usage: image-build-inputs.sh affected <from> <to>}"
@@ -100,7 +131,7 @@ case "${1:-}" in
     done < <(all_images)
     ;;
   *)
-    echo "usage: $0 {inputs <image>|shared|affected <from> <to>}" >&2
+    echo "usage: $0 {inputs <image>|shared|owners <path>|affected <from> <to>}" >&2
     exit 2
     ;;
 esac
