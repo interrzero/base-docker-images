@@ -1,5 +1,5 @@
 # Using the custom NGINX image from chainguard
-FROM cgr.dev/chainguard/nginx:latest-dev@sha256:e92db04e930b50b9a44168a7c21b333e5947b35e045cc408454a8af23a8c8aed AS builder
+FROM cgr.dev/chainguard/nginx:latest-dev@sha256:31186cd3ee7ae563beeed88dd79e778dddd8a46634f4ebf6078a9fbfa61a64aa AS builder
 
 # Switching to root user for package installation
 USER root
@@ -58,7 +58,7 @@ USER nginx
 SHELL ["/bin/ash", "-eo", "pipefail", "-c"]
 
 # Start the second stage of the Dockerfile
-FROM cgr.dev/chainguard/nginx:latest@sha256:a104d1995e56b7a15e8f152078dfbdb1ecbf9f9d1af311e7906e7b4c0c790cf2
+FROM cgr.dev/chainguard/nginx:latest@sha256:f77f61de0f1001a54f3186e8a62adcde80c946603b88379263cf6f3bbaab54a7
 
 # Copy compiled modules only if the directory exists
 COPY --from=builder /usr/local/nginx/modules/*.so /var/lib/nginx/modules/

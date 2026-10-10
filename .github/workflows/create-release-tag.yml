@@ -44,6 +44,10 @@ jobs:
 
       - name: Detect images whose build inputs changed
         id: build_matrix
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
         run: |
           # An image used to be tagged only when its own Dockerfile changed.
           # That misses the common case: a Dockerfile COPYs a script, the script
@@ -58,6 +62,38 @@ jobs:
           # config, and treats shared gate inputs as affecting every image.
           # Deriving beats a hand-kept list: a new COPY is covered the day it is
           # added, with nobody having to remember.
+          # On a pull request the question is "what does THIS PR touch", not
+          # "what differs from each image's last release". Comparing against
+          # release tags is correct for a push to main, but on a PR it reports
+          # almost every image as changed, because main has moved since those
+          # tags were cut. That inflated a one-Dockerfile PR to a nine-image
+          # matrix, and nine concurrent jobs then tripped a Docker Hub rate
+          # limit and failed the whole PR. Scope it to the PR's own diff.
+          if [ "$EVENT_NAME" = "pull_request" ]; then
+            pr_images=()
+            while IFS= read -r path; do
+              [ -n "$path" ] || continue
+              while IFS= read -r image; do
+                [ -n "$image" ] || continue
+                case " ${pr_images[*]-} " in *" $image "*) continue;; esac
+                pr_images+=("$image")
+              done < <(./scripts/image-build-inputs.sh owners "$path")
+            done < <(git diff --name-only "$PR_BASE_SHA" "$PR_HEAD_SHA")
+
+            if [ ${#pr_images[@]} -eq 0 ]; then
+              echo "No image build inputs changed in this pull request."
+              echo "images_to_build=[]" >> "$GITHUB_OUTPUT"
+              echo "has_changes=false" >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
+            echo "Pull request touches: ${pr_images[*]}"
+            out="["
+            for item in "${pr_images[@]}"; do out+="\"$item\", "; done
+            echo "images_to_build=${out%, }]" >> "$GITHUB_OUTPUT"
+            echo "has_changes=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
           images_to_build=()
           while IFS= read -r dockerfile; do
             [ -f "$dockerfile" ] || continue
@@ -174,11 +210,34 @@ jobs:
 
           echo "current_semver=$semver" >> "$GITHUB_OUTPUT"
 
+      # Computed in shell rather than with a Docker-based action. The previous
+      # step used WyriHaximus/github-action-next-semvers, whose image is pulled
+      # UNAUTHENTICATED from Docker Hub and built on the runner. When the matrix
+      # covered several images at once, the concurrent anonymous pulls hit Docker
+      # Hub's rate limit and every job failed with
+      #   429 Too Many Requests ... /v2/wyrihaximusgithubactions/next-semvers
+      # which blocked an unrelated security fix from merging. This is three lines
+      # of arithmetic; it does not justify a network dependency that can throttle.
       - name: Calculate next version
         id: next_version
-        uses: "WyriHaximus/github-action-next-semvers@d079934efaf011a4cf8912d4637097fe35d32b93" # v1
-        with:
-          version: ${{ steps.latest_tag.outputs.current_semver }}
+        env:
+          CURRENT_SEMVER: ${{ steps.latest_tag.outputs.current_semver }}
+        run: |
+          case "$CURRENT_SEMVER" in
+            [0-9]*.[0-9]*.[0-9]*) ;;
+            *) echo "::error::unparseable current version '$CURRENT_SEMVER'" >&2; exit 1 ;;
+          esac
+          major="${CURRENT_SEMVER%%.*}"
+          rest="${CURRENT_SEMVER#*.}"
+          minor="${rest%%.*}"
+          patch="${rest#*.}"
+          # Same output names and meanings the action provided, so the steps that
+          # consume them are unchanged.
+          {
+            echo "patch=${major}.${minor}.$((patch + 1))"
+            echo "minor=${major}.$((minor + 1)).0"
+            echo "major=$((major + 1)).0.0"
+          } >> "$GITHUB_OUTPUT"
 
       - name: Display version information
         env:
