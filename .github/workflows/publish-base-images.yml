@@ -300,9 +300,27 @@ jobs:
           REPOSITORY: ${{ github.repository }}
           CTX_IMAGE_NAME: ${{ steps.context.outputs.image-name }}
           VERSION_NO_BUILD: ${{ steps.context.outputs.version-no-build }}
+          VERSION_FULL: ${{ steps.context.outputs.version }}
         run: |
           image_name="${REGISTRY}/${REPOSITORY}/${CTX_IMAGE_NAME}"
           tag="$VERSION_NO_BUILD"
+
+          # A rebuild tag carries semver build metadata, e.g.
+          #   release/<image>/v0.0.60+rebuild.20261008172059
+          # and version-no-build strips it back to v0.0.60 - which is already
+          # published, by definition. Treating that as "nothing to do" is wrong:
+          # the point of a rebuild is NEW CONTENT AT THE SAME VERSION, picking
+          # up a distro fix. The previous behaviour skipped Push, Sign, Verify,
+          # Attest and Apply-consumer-tags, so the daily scan built the fixed
+          # image, scanned it, threw it away and reported success, while
+          # :latest kept serving the vulnerable build. Observed for real on
+          # python-3.14-base, whose arm64 :latest stayed stale for days.
+          if [ "$VERSION_FULL" != "$VERSION_NO_BUILD" ]; then
+            echo "Rebuild tag ($VERSION_FULL): republishing ${tag} with new content."
+            echo "image_exists=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
           if docker manifest inspect "$image_name:$tag" >/dev/null 2>&1; then
             echo "image_exists=true" >> "$GITHUB_OUTPUT"
           else
@@ -318,6 +336,10 @@ jobs:
       # and verification: if the version tag exists, the publish completed in
       # full. A partially published tag has no version tag, so a re-run
       # correctly rebuilds and repairs it.
+      #
+      # That holds only for a PLAIN version tag. A rebuild tag carries build
+      # metadata and always republishes - see the guard above - because its
+      # whole purpose is new content at a version that is already published.
       - name: Exit early if image already published
         if: github.event_name == 'push' && github.ref_type == 'tag' && steps.image_exists.outputs.image_exists == 'true'
         run: |
