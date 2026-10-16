@@ -52,16 +52,22 @@ jobs:
         with:
           # Endpoints derived from an observed run, not guessed:
           #   github.com / objects.githubusercontent.com - checkout and action tarballs
+          #   pypi.org / files.pythonhosted.org - the zizmor wheel: since zizmor-action
+          #     v0.7.0 the action pip-downloads it from PyPI, hash-pinned by the
+          #     action's own lock file (it no longer runs the zizmor container)
           #   ghcr.io / pkg-containers.githubusercontent.com - the zizmor container image
+          #     before v0.7.0; drop them once a run's insights show them unused
           #   api.github.com - SARIF upload to code scanning, and gh issue create
           egress-policy: block
           disable-telemetry: true
           allowed-endpoints: >
             api.github.com:443
+            files.pythonhosted.org:443
             ghcr.io:443
             github.com:443
             objects.githubusercontent.com:443
             pkg-containers.githubusercontent.com:443
+            pypi.org:443
 
       - name: Checkout repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -90,16 +96,22 @@ jobs:
         with:
           # Endpoints derived from an observed run, not guessed:
           #   github.com / objects.githubusercontent.com - checkout and action tarballs
+          #   pypi.org / files.pythonhosted.org - the zizmor wheel: since zizmor-action
+          #     v0.7.0 the action pip-downloads it from PyPI, hash-pinned by the
+          #     action's own lock file (it no longer runs the zizmor container)
           #   ghcr.io / pkg-containers.githubusercontent.com - the zizmor container image
+          #     before v0.7.0; drop them once a run's insights show them unused
           #   api.github.com - SARIF upload to code scanning, and gh issue create
           egress-policy: block
           disable-telemetry: true
           allowed-endpoints: >
             api.github.com:443
+            files.pythonhosted.org:443
             ghcr.io:443
             github.com:443
             objects.githubusercontent.com:443
             pkg-containers.githubusercontent.com:443
+            pypi.org:443
 
       - name: Checkout repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
