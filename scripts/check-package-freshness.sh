@@ -49,10 +49,23 @@ echo "check-package-freshness: ${IMAGE} (${PLATFORM})"
 # instead of the live repository - which reports everything as current no
 # matter how stale it is. That false green is the exact failure this guard
 # exists to prevent, so it must not be the guard's own behaviour.
-if ! docker run --rm --platform "${PLATFORM}" --user root --entrypoint sh "${IMAGE}" -c 'command -v apk' >/dev/null 2>&1; then
-  echo "  no apk in this image - nothing to compare"
-  exit 0
-fi
+#
+# docker exits 125 when it cannot run the image at all (a missing image, a
+# platform the image was not built for) and 126/127 when the command is not in
+# the image. Only the second is "no apk"; the first used to read as a pass.
+probe_rc=0
+docker run --rm --platform "${PLATFORM}" --user root --entrypoint sh "${IMAGE}" -c 'command -v apk' >/dev/null 2>&1 || probe_rc=$?
+case "${probe_rc}" in
+  0) ;;
+  1|126|127)
+    echo "  no apk in this image - nothing to compare"
+    exit 0
+    ;;
+  *)
+    echo "::error::could not run ${IMAGE} for ${PLATFORM} (docker exit ${probe_rc}); refusing to report clean" >&2
+    exit 1
+    ;;
+esac
 
 stale="$(docker run --rm --platform "${PLATFORM}" --user root --entrypoint sh "${IMAGE}" -c '
   apk update >/dev/null 2>&1 || exit 97
@@ -68,6 +81,6 @@ if [ -z "${stale}" ]; then
 fi
 
 echo "::error::${IMAGE} ships packages older than the repository offers:" >&2
-echo "${stale}" | sed 's/^/    /' >&2
+printf '    %s\n' "${stale//$'\n'/$'\n'    }" >&2
 echo "::error::rebuild picks these up automatically - if this persists, the image's apk upgrade step is not working." >&2
 exit 1

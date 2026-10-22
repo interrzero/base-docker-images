@@ -38,6 +38,14 @@ import sys
 MSGPACK_MIN = (1, 2, 1)
 MSGPACK_MODULES = ("__init__.py", "exceptions.py", "ext.py", "fallback.py")
 
+# Vendored packages removed from pip, as {package directory under pip/_vendor:
+# the distribution vendor.txt and bom.cdx.json name it by}. The reasons are in
+# the module docstring. harden-virtualenv-seeds.py removes the same packages
+# from the pip seed wheel bundled in virtualenv, so an environment it creates
+# does not get back what the installed pip no longer carries. A unit test keeps
+# the two definitions identical.
+REMOVED_VENDORED = {"pkg_resources": "setuptools"}
+
 
 def fail(message: str) -> None:
     sys.exit(f"harden-pip-vendor: {message}")
@@ -93,10 +101,15 @@ def replace_vendored_msgpack(vendor: pathlib.Path) -> str:
 
 
 def remove_vendored_pkg_resources(vendor: pathlib.Path) -> None:
-    target = vendor / "pkg_resources"
-    if not target.is_dir():
-        fail(f"expected bundled pkg_resources at {target}")
-    shutil.rmtree(target)
+    for package in REMOVED_VENDORED:
+        target = vendor / package
+        if not target.is_dir():
+            fail(f"expected bundled {package} at {target}")
+        shutil.rmtree(target)
+
+
+def _removed_distributions() -> set[str]:
+    return {_normalize(name) for name in REMOVED_VENDORED.values()}
 
 
 def rewrite_vendor_txt(vendor: pathlib.Path, msgpack_version: str) -> None:
@@ -105,21 +118,22 @@ def rewrite_vendor_txt(vendor: pathlib.Path, msgpack_version: str) -> None:
         fail(f"expected {path}")
 
     kept: list[str] = []
-    saw_msgpack = saw_setuptools = False
+    saw_msgpack = False
+    removed: set[str] = set()
     for line in path.read_text().splitlines():
         name = line.strip().split("==")[0].strip().lower()
         if name == "msgpack":
             saw_msgpack = True
             kept.append(f"msgpack=={msgpack_version}")
-        elif name == "setuptools":
-            saw_setuptools = True
+        elif _normalize(name) in _removed_distributions():
+            removed.add(_normalize(name))
         else:
             kept.append(line)
 
     if not saw_msgpack:
         fail(f"no msgpack entry found in {path}")
-    if not saw_setuptools:
-        fail(f"no setuptools entry found in {path}")
+    for name in sorted(_removed_distributions() - removed):
+        fail(f"no {name} entry found in {path}")
     path.write_text("\n".join(kept) + "\n")
 
 
@@ -135,7 +149,9 @@ def rewrite_bom(vendor: pathlib.Path, msgpack_version: str) -> None:
         fail(f"unexpected structure in {path}: no components list")
 
     kept = []
-    saw_msgpack = saw_setuptools = False
+    saw_msgpack = False
+    removed: set[str] = set()
+    removed_refs: set[str] = set()
     for component in components:
         name = str(component.get("name", "")).lower()
         if name == "msgpack":
@@ -145,17 +161,32 @@ def rewrite_bom(vendor: pathlib.Path, msgpack_version: str) -> None:
             if isinstance(purl, str) and "@" in purl:
                 component["purl"] = f"{purl.split('@', 1)[0]}@{msgpack_version}"
             kept.append(component)
-        elif name == "setuptools":
-            saw_setuptools = True
+        elif _normalize(name) in _removed_distributions():
+            removed.add(_normalize(name))
+            if isinstance(component.get("bom-ref"), str):
+                removed_refs.add(component["bom-ref"])
         else:
             kept.append(component)
 
     if not saw_msgpack:
         fail(f"no msgpack component found in {path}")
-    if not saw_setuptools:
-        fail(f"no setuptools component found in {path}")
+    for name in sorted(_removed_distributions() - removed):
+        fail(f"no {name} component found in {path}")
 
     bom["components"] = kept
+    # A removed component's dependency node and every edge to it go too:
+    # left behind they describe a package the image no longer contains.
+    if isinstance(bom.get("dependencies"), list):
+        dependencies = []
+        for entry in bom["dependencies"]:
+            if entry.get("ref") in removed_refs:
+                continue
+            if "dependsOn" in entry:
+                entry["dependsOn"] = [
+                    ref for ref in entry["dependsOn"] if ref not in removed_refs
+                ]
+            dependencies.append(entry)
+        bom["dependencies"] = dependencies
     path.write_text(json.dumps(bom, indent=2) + "\n")
 
 
@@ -260,13 +291,20 @@ def verify_bom_agrees(vendor: pathlib.Path) -> None:
     if not path.is_file():
         return
     pins = read_vendor_pins(vendor)
+    bom = json.loads(path.read_text())
     bad = []
-    for component in json.loads(path.read_text()).get("components", []):
+    for component in bom.get("components", []):
         name = str(component.get("name", ""))
         declared = str(component.get("version", ""))
         actual = pins.get(_normalize(name))
         if actual is not None and declared != actual:
             bad.append(f"{name} declared {declared}, pinned {actual}")
+    known = {c.get("bom-ref") for c in bom.get("components", [])}
+    known.add(((bom.get("metadata") or {}).get("component") or {}).get("bom-ref"))
+    for entry in bom.get("dependencies", []):
+        for ref in [entry.get("ref")] + list(entry.get("dependsOn", [])):
+            if ref not in known:
+                bad.append(f"dependency on {ref}, which no component declares")
     if bad:
         fail("bom.cdx.json still disagrees with vendor.txt: " + "; ".join(bad))
 
@@ -340,11 +378,13 @@ def verify(vendor: pathlib.Path, msgpack_version: str) -> None:
             "from pip._internal.metadata import select_backend; "
             "assert select_backend().NAME == 'importlib', select_backend().NAME",
         ),
+    ] + [
         (
-            "bundled pkg_resources gone",
+            f"bundled {package} gone",
             "import importlib.util as u; "
-            "assert u.find_spec('pip._vendor.pkg_resources') is None",
-        ),
+            f"assert u.find_spec('pip._vendor.{package}') is None",
+        )
+        for package in REMOVED_VENDORED
     ]
     for label, snippet in checks:
         result = subprocess.run(
@@ -354,8 +394,9 @@ def verify(vendor: pathlib.Path, msgpack_version: str) -> None:
             fail(f"verification failed ({label}): {result.stderr.strip()}")
         print(f"  ok: {label}")
 
-    if (vendor / "pkg_resources").exists():
-        fail("pkg_resources directory still present after removal")
+    for package in REMOVED_VENDORED:
+        if (vendor / package).exists():
+            fail(f"{package} directory still present after removal")
 
 
 def main() -> None:

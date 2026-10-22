@@ -91,6 +91,35 @@ jobs:
 
           echo "All buildable images have a matching structure test config."
 
+  # Unit tests for the build-time hardening scripts and the publish-failure
+  # reporter, on fixtures that pin the shapes met so far. The image build runs
+  # the hardening against whatever upstream ships that day, and the reporter
+  # runs only after a publish has failed, so without this a regression in
+  # either surfaces only after a release tag has built - up to an hour on the
+  # arm64 leg - instead of on the pull request that introduces it. Needs no
+  # network and no build.
+  test-hardening-scripts:
+    name: Hardening script unit tests
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Harden Runner
+        uses: step-security/harden-runner@dc2769abcc0fcfbadfc1df54081c1608579ef6b2 # v2.22.2
+        with:
+          egress-policy: block
+          disable-telemetry: true
+          allowed-endpoints: >
+            github.com:443
+
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Run hardening script unit tests
+        run: python3 -m unittest discover -s tests/scripts -v
+
   generate-matrix:
     runs-on: ubuntu-latest
     permissions:

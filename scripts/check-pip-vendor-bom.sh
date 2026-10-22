@@ -32,16 +32,31 @@ echo "check-pip-vendor-bom: ${IMAGE} (${PLATFORM})"
 # this for every image, and most of them have no python at all - treating a
 # missing interpreter as a failure would red-light the whole fleet. An image
 # without python cannot carry pip's vendored BOM, so this is a genuine pass.
-if ! docker run --rm --platform "${PLATFORM}" --entrypoint sh "${IMAGE}" \
-     -c 'command -v python3 >/dev/null 2>&1' 2>/dev/null; then
-  echo "  no python3 in this image - no pip vendored BOM to check"
-  exit 0
-fi
+#
+# The probe's exit status decides, not just its success: docker exits 125 when
+# it cannot run the image at all - a missing image, a platform the image was
+# not built for, a daemon error - and 126/127 when the command is not in the
+# image. Only the second is "no python3"; the first used to read as a pass.
+probe_rc=0
+docker run --rm --platform "${PLATFORM}" --entrypoint sh "${IMAGE}" \
+  -c 'command -v python3 >/dev/null 2>&1' 2>/dev/null || probe_rc=$?
+case "${probe_rc}" in
+  0) ;;
+  1|126|127)
+    echo "  no python3 in this image - no pip vendored BOM to check"
+    exit 0
+    ;;
+  *)
+    echo "::error::could not run ${IMAGE} for ${PLATFORM} (docker exit ${probe_rc}); refusing to report clean" >&2
+    exit 1
+    ;;
+esac
 
 # The comparison runs inside the image, in python, because that is the only way
 # to read the importable module's own __version__ rather than trusting a
-# declaration. Python is guaranteed present in any image that has pip.
-report="$(docker run --rm --platform "${PLATFORM}" --entrypoint python3 "${IMAGE}" -c '
+# declaration. Python is guaranteed present in any image that has pip. It runs
+# isolated (-I), so nothing on the image PYTHONPATH can shadow what it imports.
+report="$(docker run --rm --platform "${PLATFORM}" --entrypoint python3 "${IMAGE}" -I -c '
 import json, pathlib, re, sys
 
 def normalize(name):
@@ -92,6 +107,15 @@ for vendor in roots:
             )
     if checked == 0:
         problems.append("no bom.cdx.json component matched any vendor.txt pin")
+    # A dependency on a component the BOM does not declare describes a package
+    # that is not there: what a removal leaves behind if it drops only the
+    # component (pkg_resources once left its setuptools node and edge).
+    known = {c.get("bom-ref") for c in comps}
+    known.add(((bom.get("metadata") or {}).get("component") or {}).get("bom-ref"))
+    for entry in bom.get("dependencies") or []:
+        for ref in [entry.get("ref")] + list(entry.get("dependsOn") or []):
+            if ref not in known:
+                problems.append("bom.cdx.json depends on %s, which no component declares" % ref)
     print("CHECKED %d components under %s" % (checked, vendor))
 
 for p in problems:
@@ -118,7 +142,7 @@ fi
 
 count="$(echo "${report}" | sed -n 's/^DONE \([0-9]*\)$/\1/p' | tail -n1)"
 if [ "${count:-1}" -ne 0 ]; then
-  echo "::error::pip's bom.cdx.json disagrees with vendor.txt. harden-pip-vendor.py should have reconciled it." >&2
+  echo "::error::pip's bom.cdx.json disagrees with vendor.txt or depends on a component it does not declare. harden-pip-vendor.py should have reconciled it." >&2
   exit 1
 fi
 

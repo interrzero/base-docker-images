@@ -74,30 +74,91 @@ case "$MODE" in
     ;;
   open)
     findings=""
+    gate_errors=""
     if [ -n "$RUN_ID" ]; then
-      # Pull the gate's own table out of the failed run rather than re-scanning,
-      # so the issue shows exactly what blocked it. GitHub echoes run-block
-      # source into the log prefixed with an escape sequence containing 36;1m;
-      # filtering those out avoids quoting our own script back as if it were
-      # scanner output.
-      # Anchor on the ISO timestamp rather than a token count: the log prefix
-      # is "(linux/arm64, ubuntu-24.04-arm)<TAB>UNKNOWN STEP<TAB><timestamp>",
-      # and the space inside the parentheses breaks any field-count assumption.
-      findings="$(gh run view "$RUN_ID" --repo "$REPO" --log-failed 2>/dev/null \
+      # Pull the gate's own table out of the failed jobs rather than re-scanning,
+      # so the issue shows exactly what blocked it.
+      #
+      # Read each FAILED JOB's log, not the run's. This script runs as a job of
+      # the very run it reports on, and gh refuses a run's logs until the whole
+      # run has completed - "run <id> is still in progress; logs will be
+      # available when it is complete" - whereas a job's log is available as
+      # soon as that job has finished, which a failed publish job has. The run
+      # form was used before and its error was discarded, so every issue filed
+      # from here said "could not extract the finding table" and was titled
+      # "no CVE findings", including one for a HIGH CVE. Errors now reach the
+      # job log instead of /dev/null; the issue is still filed if they occur.
+      logs=""
+      # --paginate: a run's jobs are listed 100 per page.
+      job_ids="$(gh api --paginate "repos/${REPO}/actions/runs/${RUN_ID}/jobs?per_page=100" \
+        --jq '.jobs[] | select(.conclusion == "failure") | .id' || true)"
+      for job_id in ${job_ids}; do
+        # A finished job's log is normally served at once; retry briefly in
+        # case it is not yet, rather than filing an issue with nothing in it.
+        job_log=""
+        for attempt in 1 2 3; do
+          job_log="$(gh api "repos/${REPO}/actions/jobs/${job_id}/logs")" && break
+          job_log=""
+          [ "${attempt}" -lt 3 ] && sleep "${LOG_RETRY_DELAY_SECONDS:-10}"
+        done
+        [ -n "${job_log}" ] || echo "warning: could not read the log of job ${job_id}" >&2
+        logs+="${job_log}"$'\n'
+      done
+      [ -n "${job_ids}" ] || echo "warning: no failed job found in run ${RUN_ID}" >&2
+
+      # Keep only the FAILED STEPS of those jobs. A job log holds every step:
+      # each opens with a "##[group]Run" line (an action's inner steps with
+      # "##[start-action"), and the post-job steps follow "Post job cleanup.".
+      # The steps that failed are the ones with an "##[error]" line in them.
+      # Anything another step printed - including a scanner table that found
+      # nothing blocking - is not what blocked the publish and is not counted.
+      # GitHub echoes run-block source into the log prefixed with an escape
+      # sequence containing 36;1m; those lines are never taken as output.
+      failed_steps="$(printf '%s\n' "$logs" | awk '
+        / ##\[group\]Run | ##\[start-action |Post job cleanup\.$/ {
+          if (err) printf "%s", buf
+          buf = ""; err = 0
+        }
+        { buf = buf $0 "\n" }
+        /##\[error\]/ && !/36;1m/ { err = 1 }
+        END { if (err) printf "%s", buf }
+      ')"
+
+      # Anchor on the ISO timestamp rather than a token count: a log line may
+      # carry a job and step prefix before "<timestamp> ", and spaces inside
+      # that prefix break any field-count assumption.
+      findings="$(printf '%s\n' "$failed_steps" \
         | grep -vF '36;1m' \
         | grep -E 'CVE-[0-9]|GHSA-|Total: [0-9]' \
         | sed -E 's/^.*[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9:.]+Z //' \
         | grep -v '^[[:space:]]*#' \
         | sort -u | head -40 || true)"
+      # What a failing gate check said, for failures that are not CVEs: from
+      # the first "##[error]" of each failed step until the runner's "Process
+      # completed with exit code" line that closes it, so the detail printed
+      # under an error line is kept with it. That closing line and the log
+      # markers carry no information and are dropped; legs that failed
+      # identically are reported once.
+      gate_errors="$(printf '%s\n' "$failed_steps" \
+        | grep -vF '36;1m' \
+        | awk '/ ##\[group\]Run | ##\[start-action |Post job cleanup\.$/ { on = 0 }
+               /##\[error\]Process completed with exit code/ { on = 0; next }
+               /##\[error\]/ { on = 1 }
+               on' \
+        | grep -vE '##\[(endgroup|end-action|start-action)' \
+        | sed -E 's/^.*[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9:.]+Z //; s/^##\[error\]//' \
+        | awk 'NF && !seen[$0]++' | head -40 || true)"
     fi
-    [ -n "$findings" ] || findings="(could not extract the finding table; see the run log)"
 
     # Only claim a CVE count when there are actually CVEs. A gate can fail for
     # reasons that are not findings at all - a guard that could not inspect the
     # image, a missing structure-test config - and titling those "blocked by 0
     # fixable MEDIUM+ findings" reads as nonsense and buries the real reason.
     # Observed for real: issue #468 said exactly that about a healthy image.
+    # Counted from the scanner lines only, before any gate message is added.
     count="$(printf '%s\n' "$findings" | grep -cE 'CVE-[0-9]|GHSA-' || true)"
+    [ -n "$findings" ] || findings="${gate_errors}"
+    [ -n "$findings" ] || findings="(could not extract the finding table; see the run log)"
     if [ "${count:-0}" -gt 0 ]; then
       title="${prefix} by ${count} fixable MEDIUM+ finding(s)"
     else

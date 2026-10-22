@@ -89,5 +89,20 @@ USER root
 # wheel from /usr/share/python-wheels.
 RUN apk del libcurl-openssl4 curl
 
+# The same wheel is what every "python3 -m venv" environment is seeded from,
+# and it vendors pkg_resources (setuptools 70.3.0), which harden-pip-vendor.py
+# removed from the installed pip above (CVE-2025-47273, CVE-2026-59890). Apply
+# the same removal to it here, as its owner and only now: ensurepip installed
+# pip from this wheel earlier, and harden-pip-vendor.py expects pkg_resources in
+# that install. The wheel is kept, so "python3 -m venv" keeps working. Run twice;
+# the second run must leave every distro wheel byte-identical.
+COPY scripts/harden-virtualenv-seeds.py /tmp/harden-virtualenv-seeds.py
+RUN python3 -I /tmp/harden-virtualenv-seeds.py --distro-wheels && \
+    sha256sum /usr/share/python-wheels/*.whl > /tmp/distro-wheels.first && \
+    python3 -I /tmp/harden-virtualenv-seeds.py --distro-wheels && \
+    sha256sum /usr/share/python-wheels/*.whl | diff /tmp/distro-wheels.first - && \
+    echo "idempotent: second run changed no distro wheel" && \
+    rm -f /tmp/harden-virtualenv-seeds.py /tmp/distro-wheels.first
+
 USER nonroot
 RUN python3 --version

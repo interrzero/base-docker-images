@@ -401,4 +401,3 @@ jobs:
             exit 1
           fi
           echo "[OK] every published :latest passes the gate"
-
