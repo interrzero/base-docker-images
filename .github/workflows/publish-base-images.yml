@@ -40,7 +40,7 @@ jobs:
       contents: read
     steps:
       - name: Harden Runner
-        uses: step-security/harden-runner@ccd8616d44fd3846e67624a50d5aad6d37bf2d25 # v2.22.1
+        uses: step-security/harden-runner@dc2769abcc0fcfbadfc1df54081c1608579ef6b2 # v2.22.2
         with:
           egress-policy: block
           disable-telemetry: true
@@ -101,7 +101,7 @@ jobs:
       tag: ${{ steps.set-tag.outputs.tag }}
     steps:
       - name: Harden Runner
-        uses: step-security/harden-runner@ccd8616d44fd3846e67624a50d5aad6d37bf2d25 # v2.22.1
+        uses: step-security/harden-runner@dc2769abcc0fcfbadfc1df54081c1608579ef6b2 # v2.22.2
         with:
           egress-policy: block
           disable-telemetry: true
@@ -206,7 +206,7 @@ jobs:
       id-token: write        # OIDC token for keyless cosign signing
     steps:
       - name: Harden Runner
-        uses: step-security/harden-runner@ccd8616d44fd3846e67624a50d5aad6d37bf2d25 # v2.22.1
+        uses: step-security/harden-runner@dc2769abcc0fcfbadfc1df54081c1608579ef6b2 # v2.22.2
         with:
           egress-policy: audit
 
@@ -481,7 +481,7 @@ jobs:
         with:
           scan-type: image
           image-ref: ${{ steps.test_image.outputs.image_ref }}
-          version: v0.76.0
+          version: v0.76.1
           format: table
           exit-code: "1"
           ignore-unfixed: true
@@ -597,7 +597,7 @@ jobs:
           # kept signing green while cosign v2 clients started reporting
           # "no signatures found" against them.
           # renovate: datasource=github-releases depName=sigstore/cosign
-          cosign-release: v3.1.3
+          cosign-release: v3.1.4
 
       - name: Sign container image with cosign
         if: github.event_name == 'push' && github.ref_type == 'tag' && steps.image_exists.outputs.image_exists != 'true'
@@ -722,7 +722,7 @@ jobs:
       actions: read    # read the publish job outputs used in the release body
     steps:
       - name: Harden Runner
-        uses: step-security/harden-runner@ccd8616d44fd3846e67624a50d5aad6d37bf2d25 # v2.22.1
+        uses: step-security/harden-runner@dc2769abcc0fcfbadfc1df54081c1608579ef6b2 # v2.22.2
         with:
           egress-policy: block
           disable-telemetry: true
@@ -889,7 +889,7 @@ jobs:
       packages: write  # push the multi-arch manifest lists to GHCR
     steps:
       - name: Harden Runner
-        uses: step-security/harden-runner@ccd8616d44fd3846e67624a50d5aad6d37bf2d25 # v2.22.1
+        uses: step-security/harden-runner@dc2769abcc0fcfbadfc1df54081c1608579ef6b2 # v2.22.2
         with:
           egress-policy: block
           disable-telemetry: true
@@ -1063,7 +1063,7 @@ jobs:
       actions: read
     steps:
       - name: Harden Runner
-        uses: step-security/harden-runner@ccd8616d44fd3846e67624a50d5aad6d37bf2d25 # v2.22.1
+        uses: step-security/harden-runner@dc2769abcc0fcfbadfc1df54081c1608579ef6b2 # v2.22.2
         with:
           egress-policy: audit
           disable-telemetry: true
@@ -1099,7 +1099,7 @@ jobs:
       issues: write
     steps:
       - name: Harden Runner
-        uses: step-security/harden-runner@ccd8616d44fd3846e67624a50d5aad6d37bf2d25 # v2.22.1
+        uses: step-security/harden-runner@dc2769abcc0fcfbadfc1df54081c1608579ef6b2 # v2.22.2
         with:
           egress-policy: audit
           disable-telemetry: true
