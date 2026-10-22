@@ -49,9 +49,20 @@ echo "  fix floors declared in harden-node-vendor.js:"
 while read -r _n _v; do echo "    ${_n} ${_v}"; done <<< "${targets}"
 
 # Locate npm's vendored tree. A shell is required, which every image shipping
-# npm has; an image without one also has no vendored tree to check.
+# npm has; an image without one also has no vendored tree to check. docker
+# exits 125 when it cannot run the image at all (a missing image, a platform
+# the image was not built for) and 126/127 when the image has no shell; only
+# the second means "no tree", and the first used to read as a pass.
+probe_rc=0
 vendor_dir="$(docker run --rm --platform "${PLATFORM}" --entrypoint sh "${IMAGE}" -c \
-  'find / -type d -path "*/node_modules/npm/node_modules" 2>/dev/null | head -n1' 2>/dev/null || true)"
+  'find / -type d -path "*/node_modules/npm/node_modules" 2>/dev/null | head -n1' 2>/dev/null)" || probe_rc=$?
+case "${probe_rc}" in
+  0|126|127) ;;
+  *)
+    echo "::error::could not run ${IMAGE} for ${PLATFORM} (docker exit ${probe_rc}); refusing to report clean" >&2
+    exit 1
+    ;;
+esac
 
 if [ -z "${vendor_dir}" ]; then
   echo "  no npm vendored tree present - nothing to check"
