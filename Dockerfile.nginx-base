@@ -1,5 +1,5 @@
 # Using the custom NGINX image from chainguard
-FROM cgr.dev/chainguard/nginx:latest-dev@sha256:3302b2b7164ece09ed8ba94047dc2a3024a647c8d910da79c856bfba57ce3e6f AS builder
+FROM cgr.dev/chainguard/nginx:latest-dev@sha256:b0ae905d8e56539471729d26fbd688019f3f406e516d16879b9ce352b6d6ddc6 AS builder
 
 # Switching to root user for package installation
 USER root
