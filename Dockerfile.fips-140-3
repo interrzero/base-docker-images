@@ -206,7 +206,14 @@ SHELL ["/bin/ash", "-o", "pipefail", "-c"]
 # keeps the out-of-FIPS-boundary libcrypto/libssl patched on every rebuild.
 RUN sed -i -E 's/=[0-9].*$//' /etc/apk/world && \
     apk update && apk upgrade --no-cache && \
-    apk add --no-cache openssl ca-certificates
+    apk add --no-cache openssl ca-certificates && \
+    # Upgrade by name every package still older than the repository offers (the
+    # publish gate's freshness list): a plain "apk upgrade" can leave a package
+    # pulled in by "apk add" behind, as libpng 1.6.59-r1 did when Wolfi split it.
+    apk update && \
+    apk version -l '<' | tail -n +2 | awk '{print $1}' \
+        | sed -E 's/-[0-9][^-]*-r[0-9]+$//' \
+        | xargs -r apk add --no-cache --upgrade
 
 ENV FIPS_ROOT=/opt/openssl-fips
 ENV OPENSSL_MODULES=${FIPS_ROOT}/ossl-modules \
