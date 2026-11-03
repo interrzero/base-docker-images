@@ -19,6 +19,10 @@ ARG OPENJDK_PACKAGE=openjdk-17
 # pin and leaves them behind. Relaxing the exact pins to bare names first is what
 # allows security updates to actually apply. Verified on apk-tools 2 and 3.
 # The "=[0-9]" anchor deliberately leaves fuzzy "=~" pins (e.g. nodejs=~24) alone.
+# The upgrade-by-name pipeline below sets pipefail inline (busybox ash supports
+# it); hadolint only recognises pipefail set by SHELL, and a SHELL change here
+# would also apply to the later RUNs.
+# hadolint ignore=DL4006,SC3040
 RUN sed -i -E 's/=[0-9].*$//' /etc/apk/world && \
     apk update && apk upgrade --no-cache && \
     apk add --no-cache --upgrade \
@@ -35,6 +39,16 @@ RUN sed -i -E 's/=[0-9].*$//' /etc/apk/world && \
         git \
         bash \
         ca-certificates && \
+    # Upgrade, by name, every package still older than the repository offers -
+    # the same list the publish gate's freshness check reports. A dependency
+    # pulled in by "apk add" can land below the newest version and a plain
+    # "apk upgrade" then leaves it there: when Wolfi split libpng (1.6.59-r1
+    # moved the library into libpng16-16) the solver kept r0 as the provider
+    # of so:libpng16.so.16, while "apk add --upgrade libpng" moves it.
+    apk update && \
+    set -o pipefail && apk version -l '<' | tail -n +2 | awk '{print $1}' \
+        | sed -E 's/-[0-9][^-]*-r[0-9]+$//' \
+        | xargs -r apk add --no-cache --upgrade && \
     mkdir -p /home/nonroot/.m2 && \
     chown -R nonroot:nonroot /home/nonroot 
     # && \
