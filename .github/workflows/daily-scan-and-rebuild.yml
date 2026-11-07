@@ -47,7 +47,7 @@ jobs:
       actions: read      # read prior run metadata when applying the rebuild cooldown
     steps:
       - name: Harden Runner
-        uses: step-security/harden-runner@46b06cea07f9e64621fdf066ba77ac6915163d43 # v2.22.3
+        uses: step-security/harden-runner@1d88384fd173af6ecb012dfd0264a306b711241a # v2.22.4
         with:
           egress-policy: audit
 
@@ -95,7 +95,7 @@ jobs:
       - name: Install Trivy scanner
         uses: aquasecurity/setup-trivy@81e514348e19b6112ce2a7e3ecbafe19c1e1f567 # v0.3.1
         with:
-          version: v0.76.1
+          version: v0.76.2
           cache: true
 
       - name: Record the Trivy version in use
