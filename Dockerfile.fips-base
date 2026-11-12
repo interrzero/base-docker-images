@@ -142,7 +142,7 @@
 # ---------------------------------------------------------------------------
 # Wolfi's Alpine base is retained from the previous revision of this file for
 # the libc-compatibility reason given in section 4 above.
-FROM ghcr.io/wolfi-dev/alpine-base:latest@sha256:5ba3cbe5c46ff93ed080e301944e64f80e175324eeab3e092693d00bf1c1b3dc AS fips-builder
+FROM ghcr.io/wolfi-dev/alpine-base:latest@sha256:a158c355236bf70ba88cb7dc63b6e43c5bbaa348a9bcc77aa067c3ed64afec6c AS fips-builder
 
 USER root
 
@@ -174,7 +174,7 @@ RUN /usr/local/bin/build-fips-module.sh "${OPENSSL_FIPS_VERSION}" "${OPENSSL_FIP
 # ---------------------------------------------------------------------------
 # Stage 2: runtime - validated Module on current, patched libcrypto/libssl
 # ---------------------------------------------------------------------------
-FROM ghcr.io/wolfi-dev/alpine-base:latest@sha256:5ba3cbe5c46ff93ed080e301944e64f80e175324eeab3e092693d00bf1c1b3dc
+FROM ghcr.io/wolfi-dev/alpine-base:latest@sha256:a158c355236bf70ba88cb7dc63b6e43c5bbaa348a9bcc77aa067c3ed64afec6c
 
 USER root
 
