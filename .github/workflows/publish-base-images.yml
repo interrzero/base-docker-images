@@ -510,7 +510,7 @@ jobs:
         with:
           scan-type: image
           image-ref: ${{ steps.test_image.outputs.image_ref }}
-          version: v0.76.1
+          version: v0.76.2
           format: table
           exit-code: "1"
           ignore-unfixed: true
@@ -617,7 +617,7 @@ jobs:
 
       - name: Install cosign
         if: github.event_name == 'push' && github.ref_type == 'tag' && steps.image_exists.outputs.image_exists != 'true'
-        uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6 # v4.1.2
+        uses: sigstore/cosign-installer@756fe2d284c7292c4e9b62c8a28f1e5629c59532 # v4.1.3
         with:
           # Pin the cosign BINARY, not just the action. Left unset, the installer
           # tracks whatever cosign is current, and a cosign major bump silently
