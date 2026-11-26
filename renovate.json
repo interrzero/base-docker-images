@@ -13,8 +13,10 @@
   "automergeStrategy": "squash",
   "platformAutomerge": true,
   "rebaseWhen": "behind-base-branch",
-  "dependencyDashboard": true,
-  "dependencyDashboardAutoclose": true,
+  "dependencyDashboard": {
+    "enabled": true,
+    "autoclose": true
+  },
   "schedule": [
     "after 11pm every weekday",
     "before 5am every weekday",
