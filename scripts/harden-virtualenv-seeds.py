@@ -193,43 +193,65 @@ def rewrite_inventory(
     removed_pairs = {
         (removed.split("-", 2)[0], removed.split("-", 2)[1]) for removed in replacements
     }
-    stale_refs = {f"pkg:pypi/{name}@{version}" for name, version in removed_pairs}
 
     for dist_info in site_packages.glob("virtualenv-*.dist-info"):
         for sbom_path in dist_info.glob("sboms/*.json"):
             document = json.loads(sbom_path.read_text(encoding="utf-8"))
 
-            kept_components = [
-                component
-                for component in document.get("components", [])
-                if (component.get("name"), component.get("version"))
-                not in removed_pairs
-            ]
-            dropped = len(document.get("components", [])) - len(kept_components)
+            kept_components = []
+            removed_components = []
+            for component in document.get("components", []):
+                if (component.get("name"), component.get("version")) in removed_pairs:
+                    removed_components.append(component)
+                else:
+                    kept_components.append(component)
+            dropped = len(removed_components)
             if not dropped:
                 continue
             document["components"] = kept_components
 
+            # The references to drop are whatever the removed components were
+            # actually called, not an assumed scheme: virtualenv up to 21.15.12
+            # used the purl as the bom-ref, 21.15.13 uses
+            # "bundled:<embed path>/<wheel file>" and names each vendored
+            # package "<that ref>#vendored/<purl>". So the set is every bom-ref
+            # defined inside a removed component (nested ones included), plus
+            # its purl and the legacy purl form, and any "<ref>#..." child of
+            # them that a dependency entry names without a matching component.
+            stale_refs = _bom_refs(removed_components)
+            stale_refs |= {
+                component["purl"]
+                for component in removed_components
+                if isinstance(component.get("purl"), str)
+            }
+            stale_refs |= {
+                f"pkg:pypi/{name}@{version}" for name, version in removed_pairs
+            }
+
+            def is_stale(ref, stale=frozenset(stale_refs)) -> bool:
+                return isinstance(ref, str) and (
+                    ref in stale or ref.split("#", 1)[0] in stale
+                )
+
             # Drop dependency nodes for the removed refs, and any edge to them.
             dependencies = []
             for entry in document.get("dependencies", []):
-                if entry.get("ref") in stale_refs:
+                if is_stale(entry.get("ref")):
                     continue
                 if "dependsOn" in entry:
                     entry["dependsOn"] = [
-                        ref for ref in entry["dependsOn"] if ref not in stale_refs
+                        ref for ref in entry["dependsOn"] if not is_stale(ref)
                     ]
                 dependencies.append(entry)
             if "dependencies" in document:
                 document["dependencies"] = dependencies
 
             for composition in document.get("compositions", []):
-                if "assemblies" in composition:
-                    composition["assemblies"] = [
-                        ref
-                        for ref in composition["assemblies"]
-                        if ref not in stale_refs
-                    ]
+                for key in ("assemblies", "dependencies"):
+                    if key in composition:
+                        composition[key] = [
+                            ref for ref in composition[key] if not is_stale(ref)
+                        ]
 
             sbom_path.write_text(
                 json.dumps(document, indent=2) + "\n", encoding="utf-8"

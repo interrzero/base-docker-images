@@ -459,6 +459,140 @@ class HardenVirtualenvSeedsTest(unittest.TestCase):
         with contextlib.redirect_stdout(io.StringIO()):
             self.script.verify_consistency(fixture.embed, fixture.site)
 
+    def test_prunes_bundled_bom_refs_of_superseded_seed_wheels(self):
+        """virtualenv 21.15.13 names each seed wheel component by
+        ``bundled:<embed path>/<wheel file>`` rather than by its purl, and
+        its vendored packages by ``<that ref>#vendored/<purl>``. Removing a
+        superseded wheel must also drop its dependency node and every edge to
+        it under that scheme, or the SBOM keeps naming pip 26.0.1."""
+        fixture = self.fixture()
+        mapping = {}
+        for wheel in fixture.embed.glob("*.whl"):
+            dist, version = wheel.name.split("-", 2)[:2]
+            mapping[f"pkg:pypi/{dist}@{version}"] = f"bundled:{EMBED}/{wheel.name}"
+
+        def rename(node):
+            if isinstance(node, dict):
+                return {
+                    key: value if key == "purl" else rename(value)
+                    for key, value in node.items()
+                }
+            if isinstance(node, list):
+                return [rename(value) for value in node]
+            if isinstance(node, str):
+                for old, new in mapping.items():
+                    if node == old or node.startswith(old + "#"):
+                        return new + node[len(old) :]
+            return node
+
+        document = rename(fixture.document())
+        root = document["dependencies"][0]["dependsOn"]
+        self.assertIn(f"bundled:{EMBED}/pip-26.0.1-py3-none-any.whl", root)
+        fixture.write_sbom_keeping_record_true(document)
+
+        self.run_script()
+
+        after = fixture.document()
+        view = json.dumps(self.script.inventory_view(after))
+        for stale in ("26.0.1", "82.0.1"):
+            self.assertNotIn(stale, view)
+        defined = self.script._bom_refs(after["components"]) | self.script._bom_refs(
+            after["metadata"]
+        )
+        for entry in after["dependencies"]:
+            for ref in [entry["ref"]] + list(entry.get("dependsOn", [])):
+                self.assertIn(ref, defined, f"dangling dependency reference {ref}")
+        self.assertEqual(
+            sorted(after["dependencies"][0]["dependsOn"]),
+            [
+                f"bundled:{EMBED}/pip-26.2.2-py3-none-any.whl",
+                f"bundled:{EMBED}/setuptools-84.2.1-py3-none-any.whl",
+            ],
+        )
+        self.assertEqual(after["bomFormat"], "CycloneDX")
+        self.assertEqual(after["specVersion"], "1.6")
+
+        # A second run, as the image build's idempotency check does, changes
+        # nothing.
+        before = fixture.snapshot()
+        self.run_script()
+        self.assertEqual(before, fixture.snapshot())
+
+    def test_prunes_exact_refs_only_and_undefined_fragment_children(self):
+        """The stale-ref match is exact, never a prefix: removing pip 26.0.1
+        must keep a pip 26.0.10 wheel and its vendored child. A dependency
+        entry that names "<removed ref>#..." without a matching component is
+        dropped too (the split-at-# branch), and compositions are pruned the
+        same way."""
+        removed = f"bundled:{EMBED}/pip-26.0.1-py3-none-any.whl"
+        kept = f"bundled:{EMBED}/pip-26.0.10-py3-none-any.whl"
+        root = "pkg:pypi/virtualenv@21.15.13"
+        document = {
+            "bomFormat": "CycloneDX",
+            "specVersion": "1.6",
+            "metadata": {"component": {"bom-ref": root, "name": "virtualenv"}},
+            "components": [
+                {
+                    "bom-ref": removed,
+                    "name": "pip",
+                    "version": "26.0.1",
+                    "purl": "pkg:pypi/pip@26.0.1",
+                    "components": [
+                        {
+                            "bom-ref": f"{removed}#vendored/pkg:pypi/rich@14.0.0",
+                            "name": "rich",
+                            "version": "14.0.0",
+                        }
+                    ],
+                },
+                {
+                    "bom-ref": kept,
+                    "name": "pip",
+                    "version": "26.0.10",
+                    "purl": "pkg:pypi/pip@26.0.10",
+                    "components": [
+                        {
+                            "bom-ref": f"{kept}#vendored/pkg:pypi/rich@14.0.0",
+                            "name": "rich",
+                            "version": "14.0.0",
+                        }
+                    ],
+                },
+            ],
+            "dependencies": [
+                {"ref": root, "dependsOn": [removed, kept]},
+                {
+                    "ref": removed,
+                    "dependsOn": [f"{removed}#vendored/pkg:pypi/rich@14.0.0"],
+                },
+                {"ref": kept, "dependsOn": [f"{kept}#vendored/pkg:pypi/rich@14.0.0"]},
+                {"ref": f"{removed}#vendored/pkg:pypi/undefined@1.0", "dependsOn": []},
+            ],
+            "compositions": [{"aggregate": "complete", "assemblies": [removed, kept]}],
+        }
+        site = pathlib.Path(self.tmp.name) / "site-packages"
+        sbom = site / "virtualenv-21.15.13.dist-info" / "sboms" / "virtualenv.cdx.json"
+        sbom.parent.mkdir(parents=True)
+        sbom.write_text(json.dumps(document), encoding="utf-8")
+        touched: set = set()
+
+        with contextlib.redirect_stdout(io.StringIO()):
+            self.script.rewrite_inventory(
+                site, {"pip-26.0.1-py3-none-any.whl": "pip-26.0.10"}, touched
+            )
+
+        after = json.loads(sbom.read_text(encoding="utf-8"))
+        self.assertEqual([c["bom-ref"] for c in after["components"]], [kept])
+        self.assertEqual(
+            after["dependencies"],
+            [
+                {"ref": root, "dependsOn": [kept]},
+                {"ref": kept, "dependsOn": [f"{kept}#vendored/pkg:pypi/rich@14.0.0"]},
+            ],
+        )
+        self.assertEqual(after["compositions"][0]["assemblies"], [kept])
+        self.assertEqual(touched, {sbom})
+
     def test_keeps_only_the_highest_seed_wheel_of_each_project(self):
         fixture = self.fixture()
         self.run_script()
@@ -630,6 +764,9 @@ class HardenVirtualenvSeedsTest(unittest.TestCase):
         for label, (tamper, expected) in cases.items():
             with self.subTest(case=label):
                 document = copy.deepcopy(pristine)
+                # Every value in `cases` is a (lambda, message) pair; pylint
+                # cannot infer a callable through the tuple unpacking above.
+                # pylint: disable-next=not-callable
                 tamper(next(c for c in document["components"] if c["name"] == "pip"))
                 fixture.write_sbom_keeping_record_true(document)
                 with self.assertRaises(SystemExit) as raised:
