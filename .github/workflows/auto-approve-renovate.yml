@@ -1,10 +1,10 @@
 name: Auto-approve Renovate PRs
 
 # pull_request rather than pull_request_target: Renovate opens its PRs from
-# in-repo branches (renovate/*), never forks, so secrets and write access are
-# already available here without handing them to untrusted fork code. A fork PR
-# that somehow reached this workflow would get a read-only token and no secrets,
-# so it fails closed instead of auto-approving.
+# in-repo branches (renovate/*), never forks, so the workflow's own token gets
+# the pull-requests: write this job asks for without handing it to untrusted
+# fork code. A fork PR that somehow reached this workflow would get a read-only
+# token, so it fails closed instead of auto-approving.
 on:
   pull_request:
     types:
@@ -25,7 +25,7 @@ jobs:
   auto-approve:
     runs-on: ubuntu-latest
     permissions:
-      contents: read        # read the PR head to evaluate the author gate
+      contents: read        # gh resolves the repository through the API
       pull-requests: write  # submit the APPROVE review on Renovate PRs
     # Gate on the author's immutable numeric id, not github.actor. actor is
     # whoever triggered the event - a synchronize can be a different account -
@@ -42,8 +42,15 @@ jobs:
             api.github.com:443
             github.com:443
 
+      # Approve with the workflow's own token, not an owner PAT, so no personal
+      # credential is exposed to this job. The approval comes from
+      # github-actions[bot], which does NOT satisfy main's required code-owner
+      # review (CODEOWNERS: * @devopsmatt): Renovate PRs still need the owner's
+      # approval or merge, and this bot approval is informational only.
+      # Requires the repository setting that lets GitHub Actions approve pull
+      # requests.
       - name: Auto-approve Renovate PR
         env:
-          GH_TOKEN: ${{ secrets.PAT_TOKEN }}
+          GH_TOKEN: ${{ github.token }}
           PR_URL: ${{ github.event.pull_request.html_url }}
         run: gh pr review "$PR_URL" --approve --body "Auto-approved by workflow"
