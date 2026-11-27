@@ -664,7 +664,7 @@ jobs:
           # kept signing green while cosign v2 clients started reporting
           # "no signatures found" against them.
           # renovate: datasource=github-releases depName=sigstore/cosign
-          cosign-release: v3.1.5
+          cosign-release: v3.1.6
 
       - name: Sign container image with cosign
         if: github.event_name == 'push' && github.ref_type == 'tag' && steps.image_exists.outputs.image_exists != 'true'
