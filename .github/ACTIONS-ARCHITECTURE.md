@@ -8,7 +8,9 @@
 | **publish-base-images** | Release tag push or PR | Core pipeline: build, test, scan, push, sign, release, manifests |
 | **daily-scan-and-rebuild** | Daily cron / manual | Scans GHCR images with Trivy, triggers rebuilds if upstream base updated |
 | **manual-build-trigger** | GitHub UI dispatch | Manually trigger builds for specific or all images |
-| **auto-approve-renovate** | Renovate PR opened | Auto-approves Renovate PRs using PAT_TOKEN (auto-merge handled natively by Renovate via `platformAutomerge`) |
+| **auto-approve-renovate** | Renovate PR opened | Approves Renovate PRs with the workflow's github.token as github-actions[bot]; that does not satisfy main's code-owner review, so the owner approves/merges Renovate PRs (`platformAutomerge` waits for that) |
+
+PR builds (publish-base-images): a changed `Dockerfile.*` builds that image; otherwise each changed path is mapped to its owning images with `scripts/image-build-inputs.sh owners` (composite actions and create-release-tag.yml own all images), and `fips-140-3` builds if it is an owner, else the first owner; no owner builds nothing.
 
 ## Flow Diagram
 
@@ -131,15 +133,15 @@ FLOW 3: RENOVATE AUTO-MANAGEMENT
        |
        v
   +-------------------------+
-  | AUTO-APPROVE            |   Auto-merge is handled natively by
-  | auto-approve-           |   Renovate via platformAutomerge in
-  | renovate.yml            |   renovate.json - no workflow needed.
+  | AUTO-APPROVE            |   Renovate's platformAutomerge merges only
+  | auto-approve-           |   after the owner's code-owner approval:
+  | renovate.yml            |   the bot approval here does not count.
   |                         |
-  | pull_request_target     |   Update classification (digest/minor/
-  | +- If actor is          |   patch/major) is also configured in
+  | pull_request            |   Update classification (digest/minor/
+  | +- If author id is      |   patch/major) is also configured in
   | |  renovate[bot]        |   renovate.json packageRules.
   | +- Approve PR via       |
-  |    PAT_TOKEN            |
+  |    github.token         |
   +-------------------------+
 
 
@@ -210,7 +212,7 @@ COMPOSITE ACTIONS (shared helpers)
 
 END-TO-END HAPPY PATH
 
-  Renovate PR -> Auto-Approve -> Renovate Auto-Merge -> Detect Changes -> Create Tag
+  Renovate PR -> Auto-Approve (bot) -> Owner approval or merge -> Detect Changes -> Create Tag
        -> Build (amd64+arm64) -> Test -> Scan -> Push -> Sign -> Attest
        -> GitHub Release -> Multi-arch Manifest
 

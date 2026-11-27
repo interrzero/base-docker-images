@@ -5,6 +5,7 @@ on:
   schedule:
     # Runs daily at 10:00 UTC (5 AM EST / 6 AM EDT)
     - cron: '0 10 * * *'
+  # checkov:skip=CKV_GHA_7: operator emergency overrides (force_rebuild, ignore_cooldown) are boolean dispatch inputs; ignore_cooldown reaches run steps only through env (INPUT_IGNORE_COOLDOWN), never interpolated into a script
   workflow_dispatch:
     inputs:
       force_rebuild:

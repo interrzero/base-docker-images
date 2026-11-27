@@ -31,9 +31,9 @@ jobs:
   # The publish job also fails on a missing config, but only once a release tag
   # has been cut and the image has already built - up to an hour on the emulated
   # arm64 leg. This catches the same mistake on the pull request that introduces
-  # it. The PR path in generate-matrix only inspects the single changed
-  # Dockerfile, so it cannot see a gap anywhere else in the fleet; this job
-  # checks every image every time.
+  # it. The PR path in generate-matrix builds a single image (the changed
+  # Dockerfile, or one image that owns a changed build input), so it cannot
+  # see a gap anywhere else in the fleet; this job checks every image every time.
   validate-structure-test-coverage:
     runs-on: ubuntu-latest
     permissions:
@@ -152,7 +152,45 @@ jobs:
           HEAD_SHA: ${{ github.sha }}
         run: |
           if [ "$EVENT_NAME" == "pull_request" ]; then
-            modified_dockerfile=$(git diff --name-only "$PR_BASE_SHA" "$HEAD_SHA" | grep "^Dockerfile\\." | head -n 1)
+            changed_files=$(git diff --name-only "$PR_BASE_SHA" "$HEAD_SHA")
+            # Only the first changed Dockerfile builds: this job emits a single
+            # tag/image-base-name that every downstream job consumes.
+            modified_dockerfile=$(printf '%s\n' "$changed_files" | grep "^Dockerfile\\." | head -n 1)
+            # No Dockerfile changed: map every changed path to the images that
+            # depend on it with scripts/image-build-inputs.sh owners (the same
+            # mapping create-release-tag uses; a shared input owns every image).
+            # Composite actions and create-release-tag.yml also own every image.
+            # Other workflow files are not build inputs. From the union of
+            # owners build fips-140-3 when present (it compiles OpenSSL and
+            # fetches sources through the egress allowlists, the riskiest
+            # build), else the first owner. No owner at all builds nothing.
+            # owners prints nothing and exits 0 for an unowned path, so any
+            # non-zero exit is a real error and fails the step (bash -e).
+            if [ -z "$modified_dockerfile" ]; then
+              owning_images=""
+              while IFS= read -r path; do
+                [ -n "$path" ] || continue
+                case "$path" in
+                  .github/actions/*|.github/workflows/create-release-tag.yml)
+                    path_owners=$(find . -maxdepth 1 -name 'Dockerfile.*' ! -name 'deprecated.Dockerfile.*' | sed 's#^\./Dockerfile\.##' | sort) ;;
+                  *)
+                    path_owners=$(./scripts/image-build-inputs.sh owners "$path") ;;
+                esac
+                if [ -n "$path_owners" ]; then
+                  echo "Build input $path is owned by: ${path_owners//$'\n'/ }"
+                  owning_images=$(printf '%s\n%s\n' "$owning_images" "$path_owners")
+                fi
+              done <<< "$changed_files"
+              owning_images=$(awk 'NF && !seen[$0]++' <<< "$owning_images")
+              if grep -qxF -- 'fips-140-3' <<< "$owning_images"; then
+                modified_dockerfile="Dockerfile.fips-140-3"
+              elif [ -n "$owning_images" ]; then
+                modified_dockerfile="Dockerfile.$(head -n 1 <<< "$owning_images")"
+              fi
+              if [ -n "$modified_dockerfile" ]; then
+                echo "No Dockerfile changed; build inputs changed, building ${modified_dockerfile#Dockerfile.}"
+              fi
+            fi
             if [ -n "$modified_dockerfile" ]; then
               detected_image="${modified_dockerfile#Dockerfile.}"
               if [[ "$detected_image" == "go-base" || "$detected_image" == "nodejs-base" || "$detected_image" == "python-base" ]]; then

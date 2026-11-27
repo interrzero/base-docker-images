@@ -5,6 +5,7 @@
 name: Manual Build Trigger
 
 on:
+  # checkov:skip=CKV_GHA_7: a manual build needs operator inputs (images, force_all, reason); each reaches run steps only through env (INPUT_IMAGES, INPUT_FORCE_ALL, INPUT_REASON), never interpolated into a script
   workflow_dispatch:
     inputs:
       images:
